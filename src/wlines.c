@@ -19,7 +19,6 @@
 
 #define WLINES_WND_CLASS L"wlines_wnd"
 #define WLINES_MARGIN 4
-#define WLINES_LINES 5
 
 #define MINC(a, b) ((a) < (b) ? (a) : (b))
 
@@ -30,7 +29,7 @@ int wnd_width, wnd_height;
 HFONT font = 0;
 char running = 1;
 HWND main_wnd = 0;
-int line_count = 0;
+int line_count = 5;
 WNDPROC prev_edit_wndproc;
 
 vec_wcharp_t menu_entries = { 0 };
@@ -326,9 +325,10 @@ void destroy_window(void)
 void usage(void)
 {
     printf(
-        "Usage: wlines.exe [-i] [-nb <color>] [-nf <color>] [-sb <color>] [-sf <color>]\n"
+        "Usage: wlines.exe [-i] [-l <count>] [-nb <color>] [-nf <color>] [-sb <color>] [-sf <color>] [-fn <font>] [-fs <size>]\n"
         "Options:\n"
         "  -i              Case-insensitive filter\n"
+        "  -l  <count>     Amount of lines to show in list\n"
         "  -nb <color>     Normal background color\n"
         "  -nf <color>     Normal foreground color\n"
         "  -sb <color>     Selected background color\n"
@@ -373,7 +373,11 @@ int main(int argc, char** argv)
         else if (i + 1 == argc)
             usage();
         // Following flags require an argument
-        else if (!strcmp(argv[i], "-nb"))
+        else if (!strcmp(argv[i], "-l")) {
+            line_count = atoi(argv[++i]);
+            if (line_count < 1)
+                usage();
+        } else if (!strcmp(argv[i], "-nb"))
             clr_nrm_bg = parse_hex(argv[++i]);
         else if (!strcmp(argv[i], "-nf"))
             clr_nrm_fg = parse_hex(argv[++i]);
@@ -399,7 +403,7 @@ int main(int argc, char** argv)
     read_menu_entries(&stdin_utf16, &menu_entries);
 
     // Set line count
-    line_count = MINC(WLINES_LINES, menu_entries.length);
+    line_count = MINC(line_count, menu_entries.length);
 
     // Set initial search results (everything)
     set_all_results();
