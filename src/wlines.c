@@ -27,6 +27,7 @@ typedef vec_t(wchar_t*) vec_wcharp_t;
 
 int wnd_width, wnd_height;
 HFONT font = 0;
+int exit_code = 0;
 char running = 1;
 HWND main_wnd = 0;
 int line_count = 5;
@@ -246,8 +247,11 @@ LRESULT CALLBACK edit_wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
                 // Else print the selected result
                 print_as_utf8(menu_entries.data[search_results.data[selected_result]]);
             }
+            running = 0;
+            return 0;
         case VK_ESCAPE: // Escape - Exit
             running = 0;
+            exit_code = 1;
             return 0;
         case VK_UP: // Up - Previous result
             if (selected_result > 0)
@@ -417,5 +421,5 @@ int main(int argc, char** argv)
     vec_deinit(&menu_entries);
     vec_deinit(&search_results);
 
-    return 0;
+    return exit_code;
 }
