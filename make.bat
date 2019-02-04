@@ -3,7 +3,7 @@
 set TCC=tcc\tcc.exe
 set PRJ=wlines
 set SRC=src/wlines.c src/vec/vec.c
-set LIB=-lgdi32 -luser32
+set LIB=-lgdi32 -luser32 -lshlwapi
 set OPT=all release debug test clean
 
 goto :main

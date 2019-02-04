@@ -11,6 +11,7 @@
 #include "vec/vec.h"
 #include <Windows.h>
 #include <assert.h>
+#include <shlwapi.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,6 +29,7 @@
 typedef vec_t(wchar_t) vec_wchar_t;
 typedef vec_t(wchar_t*) vec_wcharp_t;
 
+static char case_insensitive_search = 0;
 static char running = 1;
 static HWND main_wnd = 0;
 static WNDPROC prev_edit_wndproc;
@@ -177,9 +179,15 @@ void update_search_results(HWND textbox_wnd)
 
     // Match new ones
     wchar_t* search_str = get_textbox_string(textbox_wnd);
-    for (int i = 0; i < menu_entries.length; i++)
-        if (wcsstr(menu_entries.data[i], search_str))
-            vec_push(&search_results, i);
+    if (case_insensitive_search) {
+        for (int i = 0; i < menu_entries.length; i++)
+            if (StrStrIW(menu_entries.data[i], search_str))
+                vec_push(&search_results, i);
+    } else {
+        for (int i = 0; i < menu_entries.length; i++)
+            if (wcsstr(menu_entries.data[i], search_str))
+                vec_push(&search_results, i);
+    }
 
     free(search_str);
 
@@ -303,6 +311,15 @@ void destroy_window(void)
     // todo
 }
 
+void usage(void)
+{
+    printf("Usage: wlines.exe [-i]\n");
+    printf("Options:\n");
+    printf("  -i              Case-insensitive filter\n");
+    printf("\n");
+    exit(1);
+}
+
 int main(int argc, char** argv)
 {
     // Make sure unicode is supported
@@ -310,6 +327,15 @@ int main(int argc, char** argv)
 
     // Turn off stdout buffering
     setvbuf(stdout, 0, _IONBF, 0);
+
+    // Parse arguments
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "-i")) {
+            case_insensitive_search = 1;
+        } else {
+            usage();
+        }
+    }
 
     // Read stdin
     vec_wchar_t stdin_utf16 = { 0 };
