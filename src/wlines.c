@@ -19,10 +19,8 @@
 
 #define WLINES_WND_CLASS L"wlines_wnd"
 #define WLINES_FONT_SIZE 18
-#define WLINES_EDIT_PADDING 4
+#define WLINES_MARGIN 4
 #define WLINES_LINES 5
-#define WLINES_LINE_WMARGIN 6
-#define WLINES_LINE_HMARGIN 4
 
 #define MINC(a, b) ((a) < (b) ? (a) : (b))
 
@@ -116,8 +114,8 @@ LRESULT CALLBACK wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 
         // Calculate rects
         RECT text_rect = {
-            .left = WLINES_LINE_WMARGIN,
-            .top = WLINES_FONT_SIZE + WLINES_EDIT_PADDING + WLINES_LINE_HMARGIN,
+            .left = WLINES_MARGIN,
+            .top = WLINES_FONT_SIZE + WLINES_MARGIN * 2,
             .right = wnd_width,
             .bottom = wnd_height
         };
@@ -285,7 +283,7 @@ void create_window(void)
 
     // Create window
     wnd_width = GetSystemMetrics(SM_CXSCREEN); // Display width
-    wnd_height = WLINES_FONT_SIZE * (line_count + 1) + WLINES_EDIT_PADDING + WLINES_LINE_HMARGIN * 2;
+    wnd_height = WLINES_FONT_SIZE * (line_count + 1) + WLINES_MARGIN * 3;
     main_wnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
         WLINES_WND_CLASS, L"wlines", 0,
         0, 0, wnd_width, wnd_height, 0, 0, 0, 0);
@@ -293,8 +291,8 @@ void create_window(void)
 
     // Create textbox
     HWND textbox = CreateWindowExW(0, L"EDIT", L"",
-        WS_VISIBLE | WS_CHILD | WS_BORDER | WS_TABSTOP | ES_LEFT | ES_AUTOVSCROLL | ES_AUTOHSCROLL,
-        0, 0, wnd_width, WLINES_FONT_SIZE + WLINES_EDIT_PADDING,
+        WS_VISIBLE | WS_CHILD | WS_TABSTOP | ES_LEFT | ES_AUTOVSCROLL | ES_AUTOHSCROLL,
+        0, WLINES_MARGIN, wnd_width, WLINES_FONT_SIZE,
         main_wnd, (HMENU)101, 0, 0);
 
     SendMessage(textbox, WM_SETFONT, (WPARAM)font, MAKELPARAM(1, 0));
