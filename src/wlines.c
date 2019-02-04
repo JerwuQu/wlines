@@ -197,6 +197,20 @@ LRESULT CALLBACK edit_wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
                 selected_result++;
             RedrawWindow(main_wnd, 0, 0, RDW_INVALIDATE);
             return 0;
+
+        // Home - First result
+        case VK_HOME:
+            if (selected_result > 0)
+                selected_result = 0;
+            RedrawWindow(main_wnd, 0, 0, RDW_INVALIDATE);
+            return 0;
+
+        // End - Last result
+        case VK_END:
+            if (search_results.length)
+                selected_result = search_results.length - 1;
+            RedrawWindow(main_wnd, 0, 0, RDW_INVALIDATE);
+            return 0;
         }
     }
 
