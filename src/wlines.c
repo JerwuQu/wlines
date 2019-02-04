@@ -29,20 +29,20 @@
 typedef vec_t(wchar_t) vec_wchar_t;
 typedef vec_t(wchar_t*) vec_wcharp_t;
 
-static char case_insensitive_search = 0;
-static char running = 1;
-static HWND main_wnd = 0;
-static WNDPROC prev_edit_wndproc;
+int wnd_width, wnd_height;
+HFONT font = 0;
+char running = 1;
+HWND main_wnd = 0;
+int line_count = 0;
+WNDPROC prev_edit_wndproc;
 
-static vec_wcharp_t menu_entries = { 0 };
-static int selected_result = -1;
-static vec_int_t search_results = { 0 };
+vec_wcharp_t menu_entries = { 0 };
+int selected_result = -1;
+vec_int_t search_results = { 0 };
 
-static int line_count = 0;
-static int wnd_width, wnd_height;
-static HFONT font = 0;
-static COLORREF clr_nrm_bg = 0x00000000, clr_nrm_fg = 0x00ffffff,
-                clr_sel_bg = 0x00ffffff, clr_sel_fg = 0x00000000;
+char case_insensitive_search = 0;
+COLORREF clr_nrm_bg = 0x00000000, clr_nrm_fg = 0x00ffffff,
+         clr_sel_bg = 0x00ffffff, clr_sel_fg = 0x00000000;
 
 void read_stdin_as_utf8(vec_wchar_t* utf16vec)
 {
