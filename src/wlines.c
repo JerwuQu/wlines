@@ -27,8 +27,6 @@ typedef vec_t(wchar_t*) vec_wcharp_t;
 
 int wnd_width, wnd_height;
 HFONT font = 0;
-int exit_code = 0;
-char running = 1;
 HWND main_wnd = 0;
 int line_count = 5;
 WNDPROC prev_edit_wndproc;
@@ -58,20 +56,21 @@ void read_stdin_as_utf8(vec_wchar_t* utf16vec)
     vec_reserve(utf16vec, charcount * sizeof(wchar_t));
     MultiByteToWideChar(CP_UTF8, 0, stdin_utf8.data, stdin_utf8.length, utf16vec->data, charcount);
     utf16vec->length = wcslen(utf16vec->data);
-
-    // Free unused utf8 buffer
-    vec_deinit(&stdin_utf8);
 }
 
 void print_as_utf8(wchar_t* utf16str)
 {
+    static int bufsz = 0;
+    static char* buf = 0;
+
     int len = wcslen(utf16str);
     int bytecount = WideCharToMultiByte(CP_UTF8, 0, utf16str, len, 0, 0, 0, 0);
-    char* buf = malloc(bytecount);
-    E(!buf);
+    if (bytecount > bufsz) {
+        bufsz = bytecount;
+        E(!(buf = realloc(buf, bufsz)));
+    }
     WideCharToMultiByte(CP_UTF8, 0, utf16str, len, buf, bytecount, 0, 0);
     printf("%.*s\n", bytecount, buf);
-    free(buf);
 }
 
 void read_menu_entries(vec_wchar_t* str_vec, vec_wcharp_t* entries_out)
@@ -90,6 +89,121 @@ void read_menu_entries(vec_wchar_t* str_vec, vec_wcharp_t* entries_out)
     }
 }
 
+wchar_t* get_textbox_string(HWND textbox_wnd)
+{
+    static int bufsz = 0;
+    static wchar_t* buf = 0;
+
+    int length = CallWindowProc(prev_edit_wndproc, textbox_wnd, EM_LINELENGTH, 0, 0);
+    int bytecount = (length + 1) * sizeof(wchar_t);
+    if (bytecount > bufsz) {
+        bufsz = bytecount;
+        E(!(buf = realloc(buf, bytecount)));
+    }
+    buf[0] = length; // EM_GETLINE requires this
+    CallWindowProc(prev_edit_wndproc, textbox_wnd, EM_GETLINE, 0, (LPARAM)buf);
+    buf[length] = 0;
+    return buf;
+}
+
+void update_search_results(wchar_t* search_str)
+{
+    // Clear previous results
+    vec_clear(&search_results);
+
+    if (wcslen(search_str) > 0) {
+        // Match entries
+        if (case_insensitive_search) {
+            for (int i = 0; i < menu_entries.length; i++)
+                if (StrStrIW(menu_entries.data[i], search_str))
+                    vec_push(&search_results, i);
+        } else {
+            for (int i = 0; i < menu_entries.length; i++)
+                if (wcsstr(menu_entries.data[i], search_str))
+                    vec_push(&search_results, i);
+        }
+    } else {
+        for (int i = 0; i < menu_entries.length; i++)
+            vec_push(&search_results, i);
+    }
+
+    selected_result = search_results.length ? 0 : -1;
+}
+
+// Window procedure for the main window's textbox
+LRESULT CALLBACK edit_wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
+{
+    switch (msg) {
+    case WM_CHAR:;
+        LRESULT result = 0;
+        switch (wparam) {
+        // Ctrl+A - Select everythinig
+        case 0x01:;
+            int length = CallWindowProc(prev_edit_wndproc, wnd, EM_LINELENGTH, 0, 0);
+            CallWindowProc(prev_edit_wndproc, wnd, EM_SETSEL, 0, length);
+            return 0;
+
+        // Ctrl+Backspace todo: simulate proper ctrl+bksp behavior
+        case 0x7f:
+            CallWindowProc(prev_edit_wndproc, wnd, WM_CHAR, 0x08, 0); // Backspace
+            break;
+
+        // Tab - Autocomplete
+        case 0x09:
+            if (selected_result >= 0) {
+                wchar_t* str = menu_entries.data[search_results.data[selected_result]];
+                int length = wcslen(str);
+                SetWindowTextW(wnd, str);
+                CallWindowProc(prev_edit_wndproc, wnd, EM_SETSEL, length, length);
+            }
+            break;
+
+        default:
+            result = CallWindowProc(prev_edit_wndproc, wnd, msg, wparam, lparam);
+        }
+
+        update_search_results(get_textbox_string(wnd));
+        RedrawWindow(main_wnd, 0, 0, RDW_INVALIDATE);
+        return result;
+
+    case WM_KEYDOWN:
+        switch (wparam) {
+        // Enter - Output choice
+        case VK_RETURN:
+            if (selected_result < 0 || (GetKeyState(VK_SHIFT) & 0x8000)) {
+                // If no results or shift is held, print input
+                wchar_t* str = get_textbox_string(wnd);
+                print_as_utf8(str);
+            } else {
+                // Else print the selected result
+                print_as_utf8(menu_entries.data[search_results.data[selected_result]]);
+            }
+            exit(0);
+
+        // Escape - Exit
+        case VK_ESCAPE:
+            exit(1);
+
+        // Up - Previous result
+        case VK_UP:
+            if (selected_result > 0)
+                selected_result--;
+            RedrawWindow(main_wnd, 0, 0, RDW_INVALIDATE);
+            return 0;
+
+        // Down - Next result
+        case VK_DOWN:
+            if (selected_result + 1 < search_results.length)
+                selected_result++;
+            RedrawWindow(main_wnd, 0, 0, RDW_INVALIDATE);
+            return 0;
+        }
+    }
+
+    return CallWindowProc(prev_edit_wndproc, wnd, msg, wparam, lparam);
+}
+
+// Window procedure for the main window
 LRESULT CALLBACK wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
     HDC hdc;
@@ -149,6 +263,7 @@ LRESULT CALLBACK wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
         // End
         EndPaint(wnd, &ps);
         return 0;
+
     case WM_CTLCOLOREDIT:;
         hdc = (HDC)wparam;
         SetTextColor(hdc, clr_nrm_fg);
@@ -158,115 +273,6 @@ LRESULT CALLBACK wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
     }
 
     return DefWindowProc(wnd, msg, wparam, lparam);
-}
-
-wchar_t* get_textbox_string(HWND textbox_wnd)
-{
-    int length = CallWindowProc(prev_edit_wndproc, textbox_wnd, EM_LINELENGTH, 0, 0);
-    wchar_t* str = malloc((length + 1) * sizeof(wchar_t));
-    E(!str);
-    str[0] = length; // EM_GETLINE requires this
-    CallWindowProc(prev_edit_wndproc, textbox_wnd, EM_GETLINE, 0, (LPARAM)str);
-    str[length] = 0;
-    return str;
-}
-
-void set_all_results(void)
-{
-    // Set initial search results (everything)
-    for (int i = 0; i < menu_entries.length; i++)
-        vec_push(&search_results, i);
-
-    if (search_results.length)
-        selected_result = 0;
-}
-
-void update_search_results(HWND textbox_wnd)
-{
-    // Clear previous results
-    vec_clear(&search_results);
-
-    // Match new ones
-    wchar_t* search_str = get_textbox_string(textbox_wnd);
-    if (wcslen(search_str) > 0) {
-        if (case_insensitive_search) {
-            for (int i = 0; i < menu_entries.length; i++)
-                if (StrStrIW(menu_entries.data[i], search_str))
-                    vec_push(&search_results, i);
-        } else {
-            for (int i = 0; i < menu_entries.length; i++)
-                if (wcsstr(menu_entries.data[i], search_str))
-                    vec_push(&search_results, i);
-        }
-    } else
-        set_all_results();
-
-    free(search_str);
-
-    // Set selected result
-    selected_result = search_results.length ? 0 : -1;
-}
-
-LRESULT CALLBACK edit_wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
-{
-    switch (msg) {
-    case WM_CHAR:;
-        LRESULT result = 0;
-        switch (wparam) {
-        case 0x01:; // Ctrl+A - Select everythinig
-            int length = CallWindowProc(prev_edit_wndproc, wnd, EM_LINELENGTH, 0, 0);
-            result = CallWindowProc(prev_edit_wndproc, wnd, EM_SETSEL, 0, length);
-            return 0;
-        case 0x7f: // Ctrl+Backspace
-            // todo: Simulate proper behavior
-            result = CallWindowProc(prev_edit_wndproc, wnd, WM_CHAR, 0x08, 0); // Backspace
-            break;
-        case 0x09: // Tab - Autocomplete
-            if (selected_result >= 0) {
-                wchar_t* str = menu_entries.data[search_results.data[selected_result]];
-                int length = wcslen(str);
-                SetWindowTextW(wnd, str);
-                CallWindowProc(prev_edit_wndproc, wnd, EM_SETSEL, length, length);
-            }
-            break;
-        default:
-            result = CallWindowProc(prev_edit_wndproc, wnd, msg, wparam, lparam);
-        }
-        update_search_results(wnd);
-        RedrawWindow(main_wnd, 0, 0, RDW_INVALIDATE);
-        return result;
-    case WM_KEYDOWN:
-        switch (wparam) {
-        case VK_RETURN: // Enter - Output choice
-            if (selected_result < 0 || (GetKeyState(VK_SHIFT) & 0x8000)) {
-                // If no results or shift is held, print input
-                wchar_t* str = get_textbox_string(wnd);
-                print_as_utf8(str);
-                free(str);
-            } else {
-                // Else print the selected result
-                print_as_utf8(menu_entries.data[search_results.data[selected_result]]);
-            }
-            running = 0;
-            return 0;
-        case VK_ESCAPE: // Escape - Exit
-            running = 0;
-            exit_code = 1;
-            return 0;
-        case VK_UP: // Up - Previous result
-            if (selected_result > 0)
-                selected_result--;
-            RedrawWindow(main_wnd, 0, 0, RDW_INVALIDATE);
-            return 0;
-        case VK_DOWN: // Down - Next result
-            if (selected_result + 1 < search_results.length)
-                selected_result++;
-            RedrawWindow(main_wnd, 0, 0, RDW_INVALIDATE);
-            return 0;
-        }
-    }
-
-    return CallWindowProc(prev_edit_wndproc, wnd, msg, wparam, lparam);
 }
 
 void create_window(void)
@@ -315,15 +321,10 @@ void create_window(void)
 
     // Event loop
     MSG msg;
-    while (GetMessageW(&msg, 0, 0, 0) && running) {
+    while (GetMessageW(&msg, 0, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
-}
-
-void destroy_window(void)
-{
-    // todo
 }
 
 void usage(void)
@@ -343,6 +344,7 @@ void usage(void)
         "Notes:\n"
         "  All colors are 6 digit hexadecimal\n"
         "\n");
+
     exit(1);
 }
 
@@ -353,7 +355,7 @@ COLORREF parse_hex(char* arg)
 
     int color = strtol(arg, 0, 16);
 
-    // Color is reversed, swap byte 1 and 3
+    // Windows' colors are reversed, swap R and B
     char* raw = (char*)&color;
     char tmp = raw[0];
     raw[0] = raw[2];
@@ -364,9 +366,6 @@ COLORREF parse_hex(char* arg)
 
 int main(int argc, char** argv)
 {
-    // Make sure unicode is supported
-    assert(sizeof(TEXT("U")) == 4);
-
     // Turn off stdout buffering
     setvbuf(stdout, 0, _IONBF, 0);
 
@@ -405,21 +404,11 @@ int main(int argc, char** argv)
 
     // Read entries
     read_menu_entries(&stdin_utf16, &menu_entries);
-
-    // Set line count
     line_count = MINC(line_count, menu_entries.length);
-
-    // Set initial search results (everything)
-    set_all_results();
+    update_search_results(L"");
 
     // Show window
     create_window();
-    destroy_window();
 
-    // Clean up
-    vec_deinit(&stdin_utf16);
-    vec_deinit(&menu_entries);
-    vec_deinit(&search_results);
-
-    return exit_code;
+    return -1;
 }
