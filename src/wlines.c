@@ -18,7 +18,6 @@
 #include <string.h>
 
 #define WLINES_WND_CLASS L"wlines_wnd"
-#define WLINES_FONT_SIZE 18
 #define WLINES_MARGIN 4
 #define WLINES_LINES 5
 
@@ -38,6 +37,8 @@ vec_wcharp_t menu_entries = { 0 };
 int selected_result = -1;
 vec_int_t search_results = { 0 };
 
+char* font_name = "Arial";
+int font_size = 18;
 char case_insensitive_search = 0;
 COLORREF clr_nrm_bg = 0x00000000, clr_nrm_fg = 0x00ffffff,
          clr_sel_bg = 0x00ffffff, clr_sel_fg = 0x00000000;
@@ -115,7 +116,7 @@ LRESULT CALLBACK wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
         // Calculate rects
         RECT text_rect = {
             .left = WLINES_MARGIN,
-            .top = WLINES_FONT_SIZE + WLINES_MARGIN * 2,
+            .top = font_size + WLINES_MARGIN * 2,
             .right = wnd_width,
             .bottom = wnd_height
         };
@@ -131,13 +132,13 @@ LRESULT CALLBACK wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
                     SetTextColor(hdc, clr_sel_fg);
                     SetDCPenColor(hdc, clr_sel_bg);
                     SetDCBrushColor(hdc, clr_sel_bg);
-                    Rectangle(hdc, 0, text_rect.top, wnd_width, text_rect.top + WLINES_FONT_SIZE);
+                    Rectangle(hdc, 0, text_rect.top, wnd_width, text_rect.top + font_size);
                 }
 
                 // Draw this line
                 DrawTextW(hdc, menu_entries.data[search_results.data[idx]], -1, &text_rect,
                     DT_NOCLIP | DT_NOPREFIX | DT_WORDBREAK | DT_EDITCONTROL);
-                text_rect.top += WLINES_FONT_SIZE;
+                text_rect.top += font_size;
 
                 // Reset text colors
                 if (idx == selected_result)
@@ -268,8 +269,8 @@ LRESULT CALLBACK edit_wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 void create_window(void)
 {
     // Load font
-    font = CreateFontW(WLINES_FONT_SIZE, 0, 0, 0,
-        FW_NORMAL, 0, 0, 0, 0, 0, 0, 0x04, 0, L"Arial");
+    font = CreateFontA(font_size, 0, 0, 0,
+        FW_NORMAL, 0, 0, 0, 0, 0, 0, 0x04, 0, font_name);
     WE(font);
 
     // Register window class
@@ -283,7 +284,7 @@ void create_window(void)
 
     // Create window
     wnd_width = GetSystemMetrics(SM_CXSCREEN); // Display width
-    wnd_height = WLINES_FONT_SIZE * (line_count + 1) + WLINES_MARGIN * 3;
+    wnd_height = font_size * (line_count + 1) + WLINES_MARGIN * 3;
     main_wnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
         WLINES_WND_CLASS, L"wlines", 0,
         0, 0, wnd_width, wnd_height, 0, 0, 0, 0);
@@ -292,7 +293,7 @@ void create_window(void)
     // Create textbox
     HWND textbox = CreateWindowExW(0, L"EDIT", L"",
         WS_VISIBLE | WS_CHILD | WS_TABSTOP | ES_LEFT | ES_AUTOVSCROLL | ES_AUTOHSCROLL,
-        0, WLINES_MARGIN, wnd_width, WLINES_FONT_SIZE,
+        0, WLINES_MARGIN, wnd_width, font_size,
         main_wnd, (HMENU)101, 0, 0);
 
     SendMessage(textbox, WM_SETFONT, (WPARAM)font, MAKELPARAM(1, 0));
@@ -332,6 +333,8 @@ void usage(void)
         "  -nf <color>     Normal foreground color\n"
         "  -sb <color>     Selected background color\n"
         "  -sf <color>     Selected foreground color\n"
+        "  -fn <font>      Font name\n"
+        "  -fs <size>      Font size\n"
         "\n"
         "Notes:\n"
         "  All colors are 6 digit hexadecimal\n"
@@ -378,7 +381,13 @@ int main(int argc, char** argv)
             clr_sel_bg = parse_hex(argv[++i]);
         else if (!strcmp(argv[i], "-sf"))
             clr_sel_fg = parse_hex(argv[++i]);
-        else
+        else if (!strcmp(argv[i], "-fn"))
+            font_name = argv[++i];
+        else if (!strcmp(argv[i], "-fs")) {
+            font_size = atoi(argv[++i]);
+            if (font_size < 1)
+                usage();
+        } else
             usage();
     }
 

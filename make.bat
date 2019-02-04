@@ -16,7 +16,7 @@ exit /b
 :test
 call :debug
 if %ERRORLEVEL% NEQ 0 (exit /b)
-type test_input.txt | %PRJ%-debug.exe -i -nb 222222 -nf 00ccff -sb 00ccff -sf 000000
+type test_input.txt | %PRJ%-debug.exe -i -nb 222222 -nf 00ccff -sb 00ccff -sf 000000 -fn "Open Sans" -fs 32
 exit /b
 
 :release
