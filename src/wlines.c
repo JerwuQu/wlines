@@ -172,6 +172,16 @@ wchar_t* get_textbox_string(HWND textbox_wnd)
     return str;
 }
 
+void set_all_results(void)
+{
+    // Set initial search results (everything)
+    for (int i = 0; i < menu_entries.length; i++)
+        vec_push(&search_results, i);
+
+    if (search_results.length)
+        selected_result = 0;
+}
+
 void update_search_results(HWND textbox_wnd)
 {
     // Clear previous results
@@ -179,15 +189,18 @@ void update_search_results(HWND textbox_wnd)
 
     // Match new ones
     wchar_t* search_str = get_textbox_string(textbox_wnd);
-    if (case_insensitive_search) {
-        for (int i = 0; i < menu_entries.length; i++)
-            if (StrStrIW(menu_entries.data[i], search_str))
-                vec_push(&search_results, i);
-    } else {
-        for (int i = 0; i < menu_entries.length; i++)
-            if (wcsstr(menu_entries.data[i], search_str))
-                vec_push(&search_results, i);
-    }
+    if (wcslen(search_str) > 0) {
+        if (case_insensitive_search) {
+            for (int i = 0; i < menu_entries.length; i++)
+                if (StrStrIW(menu_entries.data[i], search_str))
+                    vec_push(&search_results, i);
+        } else {
+            for (int i = 0; i < menu_entries.length; i++)
+                if (wcsstr(menu_entries.data[i], search_str))
+                    vec_push(&search_results, i);
+        }
+    } else
+        set_all_results();
 
     free(search_str);
 
@@ -313,11 +326,35 @@ void destroy_window(void)
 
 void usage(void)
 {
-    printf("Usage: wlines.exe [-i]\n");
-    printf("Options:\n");
-    printf("  -i              Case-insensitive filter\n");
-    printf("\n");
+    printf(
+        "Usage: wlines.exe [-i] [-nb <color>] [-nf <color>] [-sb <color>] [-sf <color>]\n"
+        "Options:\n"
+        "  -i              Case-insensitive filter\n"
+        "  -nb <color>     Normal background color\n"
+        "  -nf <color>     Normal foreground color\n"
+        "  -sb <color>     Selected background color\n"
+        "  -sf <color>     Selected foreground color\n"
+        "\n"
+        "Notes:\n"
+        "  All colors are 6 digit hexadecimal\n"
+        "\n");
     exit(1);
+}
+
+COLORREF parse_hex(char* arg)
+{
+    if (strlen(arg) != 6)
+        usage();
+
+    int color = strtol(arg, 0, 16);
+
+    // Color is reversed, swap byte 1 and 3
+    char* raw = (char*)&color;
+    char tmp = raw[0];
+    raw[0] = raw[2];
+    raw[2] = tmp;
+
+    return color;
 }
 
 int main(int argc, char** argv)
@@ -330,11 +367,21 @@ int main(int argc, char** argv)
 
     // Parse arguments
     for (int i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "-i")) {
+        if (!strcmp(argv[i], "-i"))
             case_insensitive_search = 1;
-        } else {
+        else if (i + 1 == argc)
             usage();
-        }
+        // Following flags require an argument
+        else if (!strcmp(argv[i], "-nb"))
+            clr_nrm_bg = parse_hex(argv[++i]);
+        else if (!strcmp(argv[i], "-nf"))
+            clr_nrm_fg = parse_hex(argv[++i]);
+        else if (!strcmp(argv[i], "-sb"))
+            clr_sel_bg = parse_hex(argv[++i]);
+        else if (!strcmp(argv[i], "-sf"))
+            clr_sel_fg = parse_hex(argv[++i]);
+        else
+            usage();
     }
 
     // Read stdin
@@ -348,11 +395,7 @@ int main(int argc, char** argv)
     line_count = MINC(WLINES_LINES, menu_entries.length);
 
     // Set initial search results (everything)
-    for (int i = 0; i < menu_entries.length; i++)
-        vec_push(&search_results, i);
-
-    if (search_results.length)
-        selected_result = 0;
+    set_all_results();
 
     // Show window
     create_window();
