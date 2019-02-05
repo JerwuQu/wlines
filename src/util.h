@@ -6,7 +6,7 @@
     } while (0)
 
 #define WE(b)                                                         \
-    if (!b)                                                           \
+    if (!(b))                                                         \
         do {                                                          \
             fprintf(stderr, "Windows error on line %d!\n", __LINE__); \
             exit(1);                                                  \

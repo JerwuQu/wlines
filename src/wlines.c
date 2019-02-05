@@ -220,28 +220,37 @@ LRESULT CALLBACK edit_wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 // Window procedure for the main window
 LRESULT CALLBACK wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
-    HDC hdc;
     switch (msg) {
     case WM_PAINT:;
         // Begin
         PAINTSTRUCT ps = { 0 };
-        hdc = BeginPaint(wnd, &ps);
+        HDC real_hdc = BeginPaint(wnd, &ps);
 
-        // Select objects
-        SelectObject(hdc, GetStockObject(DC_PEN));
-        SelectObject(hdc, GetStockObject(DC_BRUSH));
-        SelectObject(hdc, font);
+        // Use a draw buffer device
+        static HDC bfhdc = 0;
+        static HBITMAP buffer_bitmap = 0;
+        if (!bfhdc) {
+            // Create
+            WE(bfhdc = CreateCompatibleDC(real_hdc));
+            WE(buffer_bitmap = CreateCompatibleBitmap(real_hdc, wnd_width, wnd_height));
+
+            // Setup
+            SelectObject(bfhdc, buffer_bitmap);
+            SelectObject(bfhdc, font);
+            SelectObject(bfhdc, GetStockObject(DC_PEN));
+            SelectObject(bfhdc, GetStockObject(DC_BRUSH));
+            SetBkMode(bfhdc, TRANSPARENT);
+        }
+
+        // Set colors
+        SetTextColor(bfhdc, clr_nrm_fg);
+        SetDCPenColor(bfhdc, clr_nrm_bg);
+        SetDCBrushColor(bfhdc, clr_nrm_bg);
 
         // Clear
-        SetDCPenColor(hdc, clr_nrm_bg);
-        SetDCBrushColor(hdc, clr_nrm_bg);
-        Rectangle(hdc, 0, 0, wnd_width, wnd_height);
+        Rectangle(bfhdc, 0, 0, wnd_width, wnd_height);
 
-        // Set text color
-        SetBkMode(hdc, TRANSPARENT);
-        SetTextColor(hdc, clr_nrm_fg);
-
-        // Calculate rects
+        // Text rect
         RECT text_rect = {
             .left = WLINES_MARGIN,
             .top = font_size + WLINES_MARGIN * 2,
@@ -257,29 +266,32 @@ LRESULT CALLBACK wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
             for (int idx = start; idx < start + count; idx++) {
                 // Set text color and color background
                 if (idx == selected_result) {
-                    SetTextColor(hdc, clr_sel_fg);
-                    SetDCPenColor(hdc, clr_sel_bg);
-                    SetDCBrushColor(hdc, clr_sel_bg);
-                    Rectangle(hdc, 0, text_rect.top, wnd_width, text_rect.top + font_size);
+                    SetTextColor(bfhdc, clr_sel_fg);
+                    SetDCPenColor(bfhdc, clr_sel_bg);
+                    SetDCBrushColor(bfhdc, clr_sel_bg);
+                    Rectangle(bfhdc, 0, text_rect.top, wnd_width, text_rect.top + font_size);
                 }
 
                 // Draw this line
-                DrawTextW(hdc, menu_entries.data[search_results.data[idx]], -1, &text_rect,
+                DrawTextW(bfhdc, menu_entries.data[search_results.data[idx]], -1, &text_rect,
                     DT_NOCLIP | DT_NOPREFIX | DT_WORDBREAK | DT_EDITCONTROL);
                 text_rect.top += font_size;
 
                 // Reset text colors
                 if (idx == selected_result)
-                    SetTextColor(hdc, clr_nrm_fg);
+                    SetTextColor(bfhdc, clr_nrm_fg);
             }
         }
+
+        // Blit
+        BitBlt(real_hdc, 0, 0, wnd_width, wnd_height, bfhdc, 0, 0, SRCCOPY);
 
         // End
         EndPaint(wnd, &ps);
         return 0;
 
     case WM_CTLCOLOREDIT:;
-        hdc = (HDC)wparam;
+        HDC hdc = (HDC)wparam;
         SetTextColor(hdc, clr_nrm_fg);
         SetBkColor(hdc, clr_nrm_bg);
         SetDCBrushColor(hdc, clr_nrm_bg);
