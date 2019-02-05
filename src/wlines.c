@@ -344,8 +344,9 @@ void create_window(void)
 void usage(void)
 {
     printf(
-        "Usage: wlines.exe [-i] [-l <count>] [-nb <color>] [-nf <color>] [-sb <color>] [-sf <color>] [-fn <font>] [-fs <size>]\n"
+        "Usage: wlines.exe [-v] [-i] [-l <count>] [-nb <color>] [-nf <color>] [-sb <color>] [-sf <color>] [-fn <font>] [-fs <size>]\n"
         "Options:\n"
+        "  -v              Print version information\n"
         "  -i              Case-insensitive filter\n"
         "  -l  <count>     Amount of lines to show in list\n"
         "  -nb <color>     Normal background color\n"
@@ -360,6 +361,12 @@ void usage(void)
         "\n");
 
     exit(1);
+}
+
+void version(void)
+{
+    printf("wlines (rev " WLINES_REVISION ")\n");
+    exit(0);
 }
 
 COLORREF parse_hex(char* arg)
@@ -385,7 +392,9 @@ int main(int argc, char** argv)
 
     // Parse arguments
     for (int i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "-i"))
+        if (!strcmp(argv[i], "-v"))
+            version();
+        else if (!strcmp(argv[i], "-i"))
             case_insensitive_search = 1;
         else if (i + 1 == argc)
             usage();

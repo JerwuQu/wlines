@@ -1,9 +1,12 @@
 @echo off
 
+rem Options
 set PRJ=wlines
 set SRC=src/wlines.c src/vec/vec.c
 set LIB=-lgdi32 -luser32 -lshlwapi
 set OPT=all release debug test clean
+set DEF=WLINES_REVISION
+for /f %%a in ('git rev-parse --short HEAD') do (set REV=%%a)
 
 goto :main
 
@@ -20,11 +23,11 @@ echo Error code: %ERRORLEVEL%
 exit /b
 
 :release
-tcc -Wall -o %PRJ%.exe %SRC% %LIB%
+tcc.exe -Wall -o %PRJ%.exe "-D%DEF%=""%REV%""" %SRC% %LIB%
 exit /b
 
 :debug
-tcc -Wall -g -o %PRJ%-debug.exe %SRC% %LIB%
+tcc.exe -Wall -g -o %PRJ%-debug.exe "-D%DEF%=""debug""" %SRC% %LIB%
 exit /b
 
 :clean
