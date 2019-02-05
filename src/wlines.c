@@ -309,15 +309,16 @@ void create_window(void)
     wnd_width = GetSystemMetrics(SM_CXSCREEN); // Display width
     wnd_height = font_size * (line_count + 1) + WLINES_MARGIN * 3;
     main_wnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
-        WLINES_WND_CLASS, L"wlines", 0,
+        WLINES_WND_CLASS, L"wlines", WS_POPUP,
         0, 0, wnd_width, wnd_height, 0, 0, 0, 0);
     WE(main_wnd);
 
     // Create textbox
     HWND textbox = CreateWindowExW(0, L"EDIT", L"",
-        WS_VISIBLE | WS_CHILD | WS_TABSTOP | ES_LEFT | ES_AUTOVSCROLL | ES_AUTOHSCROLL,
+        WS_VISIBLE | WS_CHILD | ES_LEFT | ES_AUTOVSCROLL | ES_AUTOHSCROLL,
         0, WLINES_MARGIN, wnd_width, font_size,
         main_wnd, (HMENU)101, 0, 0);
+    WE(textbox);
 
     SendMessage(textbox, WM_SETFONT, (WPARAM)font, MAKELPARAM(1, 0));
     prev_edit_wndproc = (WNDPROC)SetWindowLongPtr(textbox, GWL_WNDPROC, (LONG_PTR)&edit_wndproc);
