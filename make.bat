@@ -1,6 +1,5 @@
 @echo off
 
-set TCC=tcc\tcc.exe
 set PRJ=wlines
 set SRC=src/wlines.c src/vec/vec.c
 set LIB=-lgdi32 -luser32 -lshlwapi
@@ -21,11 +20,11 @@ echo Error code: %ERRORLEVEL%
 exit /b
 
 :release
-%TCC% -Wall -o %PRJ%.exe %SRC% %LIB%
+tcc -Wall -o %PRJ%.exe %SRC% %LIB%
 exit /b
 
 :debug
-%TCC% -Wall -g -o %PRJ%-debug.exe %SRC% %LIB%
+tcc -Wall -g -o %PRJ%-debug.exe %SRC% %LIB%
 exit /b
 
 :clean
