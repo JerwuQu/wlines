@@ -335,6 +335,9 @@ LRESULT CALLBACK wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
         SetBkColor(hdc, clr_nrm_bg);
         SetDCBrushColor(hdc, clr_nrm_bg);
         return (LRESULT)GetStockObject(DC_BRUSH);
+
+    case WM_CLOSE:
+        exit(1);
     }
 
     return DefWindowProc(wnd, msg, wparam, lparam);
