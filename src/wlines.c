@@ -221,6 +221,28 @@ LRESULT CALLBACK edit_wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
                 selected_result = search_results.length - 1;
             RedrawWindow(main_wnd, 0, 0, RDW_INVALIDATE);
             return 0;
+
+        // Page Up - Previous page
+        case VK_PRIOR:
+            if (selected_result > 0) {
+                selected_result = (selected_result / line_count - 1) * line_count;
+                if (selected_result < 0)
+                    selected_result = 0;
+            }
+
+            RedrawWindow(main_wnd, 0, 0, RDW_INVALIDATE);
+            return 0;
+
+        // Page Down - Next page
+        case VK_NEXT:
+            if (selected_result + 1 < search_results.length) {
+                int n = (selected_result / line_count + 1) * line_count;
+                if (n < search_results.length)
+                    selected_result = n;
+            }
+
+            RedrawWindow(main_wnd, 0, 0, RDW_INVALIDATE);
+            return 0;
         }
     }
 
