@@ -158,6 +158,11 @@ LRESULT CALLBACK edit_wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
             }
             break;
 
+        // Return - Ignore (handled in WM_KEYDOWN)
+        case 0x0a:
+        case 0x0d:
+            return 0;
+
         default:
             result = CallWindowProc(prev_edit_wndproc, wnd, msg, wparam, lparam);
         }
@@ -178,6 +183,11 @@ LRESULT CALLBACK edit_wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
                 // Else print the selected result
                 print_as_utf8(menu_entries.data[search_results.data[selected_result]]);
             }
+
+            // Dont quit if control is held
+            if (GetKeyState(VK_CONTROL) & 0x8000)
+                return 0;
+
             exit(0);
 
         // Escape - Exit
