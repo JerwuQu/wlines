@@ -143,8 +143,15 @@ LRESULT CALLBACK edit_wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
             CallWindowProc(prev_edit_wndproc, wnd, EM_SETSEL, 0, length);
             return 0;
 
-        // Ctrl+Backspace todo: simulate proper ctrl+bksp behavior
-        case 0x7f:
+        // Ctrl+Backspace - Simulate proper ctrl+bksp behavior
+        case 0x7f:;
+            // todo: make this less hacky if at all possible
+            int start_sel = 0, end_sel = 0;
+            CallWindowProc(prev_edit_wndproc, wnd, EM_GETSEL, 0, (LPARAM)&end_sel);
+            CallWindowProc(prev_edit_wndproc, wnd, WM_KEYDOWN, VK_LEFT, 0);
+            CallWindowProc(prev_edit_wndproc, wnd, WM_KEYUP, VK_LEFT, 0);
+            CallWindowProc(prev_edit_wndproc, wnd, EM_GETSEL, (WPARAM)&start_sel, 0);
+            CallWindowProc(prev_edit_wndproc, wnd, EM_SETSEL, start_sel, end_sel);
             CallWindowProc(prev_edit_wndproc, wnd, WM_CHAR, 0x08, 0); // Backspace
             break;
 
