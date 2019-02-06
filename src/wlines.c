@@ -286,7 +286,7 @@ LRESULT CALLBACK wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
         RECT text_rect = {
             .left = WLINES_MARGIN,
             .top = font_size + WLINES_MARGIN * 2,
-            .right = wnd_width,
+            .right = wnd_width - WLINES_MARGIN,
             .bottom = wnd_height
         };
 
@@ -306,7 +306,7 @@ LRESULT CALLBACK wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 
                 // Draw this line
                 DrawTextW(bfhdc, menu_entries.data[search_results.data[idx]], -1, &text_rect,
-                    DT_NOCLIP | DT_NOPREFIX | DT_WORDBREAK | DT_EDITCONTROL);
+                    DT_NOCLIP | DT_NOPREFIX | DT_END_ELLIPSIS);
                 text_rect.top += font_size;
 
                 // Reset text colors
