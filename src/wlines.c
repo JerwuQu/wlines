@@ -398,7 +398,7 @@ void create_window(void)
 
 void usage(void)
 {
-    printf(
+    fprintf(stderr,
         "Usage: wlines.exe [-v] [-i] [-l <count>] [-nb <color>] [-nf <color>] [-sb <color>] [-sf <color>] [-fn <font>] [-fs <size>]\n"
         "Options:\n"
         "  -v              Print version information\n"
@@ -420,7 +420,7 @@ void usage(void)
 
 void version(void)
 {
-    printf("wlines (rev " WLINES_REVISION ")\n");
+    fprintf(stderr, "wlines (rev " WLINES_REVISION ")\n");
     exit(0);
 }
 
