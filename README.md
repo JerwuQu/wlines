@@ -40,7 +40,7 @@ wlines has been tested and works on unmodified Windows XP (32-bit) and Windows 1
 
 * [tcc](https://bellard.org/tcc/) - by [Fabrice Bellard](https://bellard.org/)
 
-* [vec](https://github.com/rxi/vec) - by [rxi](https://github.com/rxi)
+* [stretchy_buffer.h](https://github.com/nothings/stb/blob/master/stretchy_buffer.h) - by [Sean Barrett](https://github.com/nothings)
 
 ### Contributing
 

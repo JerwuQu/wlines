@@ -2,7 +2,7 @@
 
 rem Options
 set PRJ=wlines
-set SRC=src/wlines.c src/vec/vec.c
+set SRC=src/wlines.c
 set LIB=-lgdi32 -luser32 -lshlwapi
 set OPT=all release debug test clean
 set DEF=WLINES_REVISION

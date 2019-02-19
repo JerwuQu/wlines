@@ -7,8 +7,26 @@
 #define _UNICODE
 #undef _MBCS
 
-#include "util.h"
-#include "vec/vec.h"
+// Utility macros
+#define MINC(a, b) ((a) < (b) ? (a) : (b))
+#define WINERR(b)                                                     \
+    if (!(b))                                                         \
+        do {                                                          \
+            fprintf(stderr, "Windows error on line %d!\n", __LINE__); \
+            exit(1);                                                  \
+    } while (0)
+
+#define OOMERR(b)                                \
+    if (!(b))                                    \
+        do {                                     \
+            fprintf(stderr, "Out of memory!\n"); \
+            exit(1);                             \
+    } while (0)
+
+// OOM handler for SB
+#define STRETCHY_BUFFER_OUT_OF_MEMORY OOMERR(1)
+
+// Libs
 #include <Windows.h>
 #include <assert.h>
 #include <shlwapi.h>
@@ -17,23 +35,23 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Locals
+#include "stretchy_buffer.h"
+
+// Constants
 #define WLINES_WND_CLASS L"wlines_wnd"
 #define WLINES_MARGIN 4
 
-#define MINC(a, b) ((a) < (b) ? (a) : (b))
-
-typedef vec_t(wchar_t) vec_wchar_t;
-typedef vec_t(wchar_t*) vec_wcharp_t;
-
+// Globals
 int wnd_width, wnd_height;
 HFONT font = 0;
 HWND main_wnd = 0;
 int line_count = 5;
 WNDPROC prev_edit_wndproc;
 
-vec_wcharp_t menu_entries = { 0 };
+wchar_t** menu_entries = 0;
 int selected_result = -1;
-vec_int_t search_results = { 0 };
+int* search_results = 0;
 
 char* font_name = "Arial";
 int font_size = 18;
@@ -41,24 +59,26 @@ char case_insensitive_search = 0;
 COLORREF clr_nrm_bg = 0x00000000, clr_nrm_fg = 0x00ffffff,
          clr_sel_bg = 0x00ffffff, clr_sel_fg = 0x00000000;
 
-void read_stdin_as_utf8(vec_wchar_t* utf16vec)
+void read_utf8_stdin_as_utf16(wchar_t** stdin_utf16)
 {
     // Read stdin as utf8
     size_t len;
     char buf[128];
-    vec_char_t stdin_utf8 = { 0 };
-    while ((len = fread(buf, 1, sizeof(buf), stdin)))
-        vec_pusharr(&stdin_utf8, buf, len);
-    E(vec_push(&stdin_utf8, 0));
+    char* stdin_utf8 = 0;
+    while ((len = fread(buf, 1, sizeof(buf), stdin))) {
+        memcpy(sb_add(stdin_utf8, len), buf, len);
+    }
+    sb_push(stdin_utf8, 0);
 
     // Convert to utf16
-    int charcount = MultiByteToWideChar(CP_UTF8, 0, stdin_utf8.data, stdin_utf8.length, 0, 0);
-    vec_reserve(utf16vec, charcount * sizeof(wchar_t));
-    MultiByteToWideChar(CP_UTF8, 0, stdin_utf8.data, stdin_utf8.length, utf16vec->data, charcount);
-    utf16vec->length = wcslen(utf16vec->data);
+    int charcount = MultiByteToWideChar(CP_UTF8, 0, stdin_utf8, sb_count(stdin_utf8), 0, 0);
+    sb_clear(*stdin_utf16);
+    sb_add(*stdin_utf16, charcount);
+    MultiByteToWideChar(CP_UTF8, 0, stdin_utf8, sb_count(stdin_utf8), *stdin_utf16, charcount);
+    sb_push(*stdin_utf16, 0);
 }
 
-void print_as_utf8(wchar_t* utf16str)
+void print_utf16_as_utf8(wchar_t* utf16str)
 {
     static int bufsz = 0;
     static char* buf = 0;
@@ -67,25 +87,28 @@ void print_as_utf8(wchar_t* utf16str)
     int bytecount = WideCharToMultiByte(CP_UTF8, 0, utf16str, len, 0, 0, 0, 0);
     if (bytecount > bufsz) {
         bufsz = bytecount;
-        E(!(buf = realloc(buf, bufsz)));
+        OOMERR(buf = realloc(buf, bufsz));
     }
     WideCharToMultiByte(CP_UTF8, 0, utf16str, len, buf, bytecount, 0, 0);
     printf("%.*s\n", bytecount, buf);
 }
 
-void read_menu_entries(vec_wchar_t* str_vec, vec_wcharp_t* entries_out)
+void parse_menu_entries(wchar_t* stdin_utf16)
 {
-    wchar_t* current = str_vec->data;
-    for (int i = 0; i < str_vec->length; i++) {
-        if (str_vec->data[i] == '\n') {
-            str_vec->data[i] = 0;
-            E(vec_push(entries_out, current));
-            current = &str_vec->data[i + 1];
+    sb_clear(menu_entries);
+
+    wchar_t* current = stdin_utf16;
+    int len = sb_count(stdin_utf16);
+    for (int i = 0; i < len; i++) {
+        if (stdin_utf16[i] == '\n') {
+            stdin_utf16[i] = 0;
+            sb_push(menu_entries, current);
+            current = &stdin_utf16[i + 1];
         }
     }
 
-    if (current < str_vec->data + str_vec->length) {
-        E(vec_push(entries_out, current));
+    if (current < stdin_utf16 + len) {
+        sb_push(menu_entries, current);
     }
 }
 
@@ -98,7 +121,7 @@ wchar_t* get_textbox_string(HWND textbox_wnd)
     int bytecount = (length + 1) * sizeof(wchar_t);
     if (bytecount > bufsz) {
         bufsz = bytecount;
-        E(!(buf = realloc(buf, bytecount)));
+        OOMERR(buf = realloc(buf, bytecount));
     }
     buf[0] = length; // EM_GETLINE requires this
     CallWindowProc(prev_edit_wndproc, textbox_wnd, EM_GETLINE, 0, (LPARAM)buf);
@@ -109,25 +132,26 @@ wchar_t* get_textbox_string(HWND textbox_wnd)
 void update_search_results(wchar_t* search_str)
 {
     // Clear previous results
-    vec_clear(&search_results);
+    sb_clear(search_results);
 
+    int entry_count = sb_count(menu_entries);
     if (wcslen(search_str) > 0) {
         // Match entries
         if (case_insensitive_search) {
-            for (int i = 0; i < menu_entries.length; i++)
-                if (StrStrIW(menu_entries.data[i], search_str))
-                    vec_push(&search_results, i);
+            for (int i = 0; i < entry_count; i++)
+                if (StrStrIW(menu_entries[i], search_str))
+                    sb_push(search_results, i);
         } else {
-            for (int i = 0; i < menu_entries.length; i++)
-                if (wcsstr(menu_entries.data[i], search_str))
-                    vec_push(&search_results, i);
+            for (int i = 0; i < entry_count; i++)
+                if (wcsstr(menu_entries[i], search_str))
+                    sb_push(search_results, i);
         }
     } else {
-        for (int i = 0; i < menu_entries.length; i++)
-            vec_push(&search_results, i);
+        for (int i = 0; i < entry_count; i++)
+            sb_push(search_results, i);
     }
 
-    selected_result = search_results.length ? 0 : -1;
+    selected_result = sb_count(search_results) ? 0 : -1;
 }
 
 // Window procedure for the main window's textbox
@@ -158,7 +182,7 @@ LRESULT CALLBACK edit_wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
         // Tab - Autocomplete
         case 0x09:
             if (selected_result >= 0) {
-                wchar_t* str = menu_entries.data[search_results.data[selected_result]];
+                wchar_t* str = menu_entries[search_results[selected_result]];
                 int length = wcslen(str);
                 SetWindowTextW(wnd, str);
                 CallWindowProc(prev_edit_wndproc, wnd, EM_SETSEL, length, length);
@@ -185,10 +209,10 @@ LRESULT CALLBACK edit_wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
             if (selected_result < 0 || (GetKeyState(VK_SHIFT) & 0x8000)) {
                 // If no results or shift is held, print input
                 wchar_t* str = get_textbox_string(wnd);
-                print_as_utf8(str);
+                print_utf16_as_utf8(str);
             } else {
                 // Else print the selected result
-                print_as_utf8(menu_entries.data[search_results.data[selected_result]]);
+                print_utf16_as_utf8(menu_entries[search_results[selected_result]]);
             }
 
             // Dont quit if control is held
@@ -210,7 +234,7 @@ LRESULT CALLBACK edit_wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 
         // Down - Next result
         case VK_DOWN:
-            if (selected_result + 1 < search_results.length)
+            if (selected_result + 1 < sb_count(search_results))
                 selected_result++;
             RedrawWindow(main_wnd, 0, 0, RDW_INVALIDATE);
             return 0;
@@ -224,8 +248,8 @@ LRESULT CALLBACK edit_wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 
         // End - Last result
         case VK_END:
-            if (search_results.length)
-                selected_result = search_results.length - 1;
+            if (sb_count(search_results))
+                selected_result = sb_count(search_results) - 1;
             RedrawWindow(main_wnd, 0, 0, RDW_INVALIDATE);
             return 0;
 
@@ -242,9 +266,9 @@ LRESULT CALLBACK edit_wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 
         // Page Down - Next page
         case VK_NEXT:
-            if (selected_result + 1 < search_results.length) {
+            if (selected_result + 1 < sb_count(search_results)) {
                 int n = (selected_result / line_count + 1) * line_count;
-                if (n < search_results.length)
+                if (n < sb_count(search_results))
                     selected_result = n;
             }
 
@@ -270,8 +294,8 @@ LRESULT CALLBACK wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
         static HBITMAP buffer_bitmap = 0;
         if (!bfhdc) {
             // Create
-            WE(bfhdc = CreateCompatibleDC(real_hdc));
-            WE(buffer_bitmap = CreateCompatibleBitmap(real_hdc, wnd_width, wnd_height));
+            WINERR(bfhdc = CreateCompatibleDC(real_hdc));
+            WINERR(buffer_bitmap = CreateCompatibleBitmap(real_hdc, wnd_width, wnd_height));
 
             // Setup
             SelectObject(bfhdc, buffer_bitmap);
@@ -298,10 +322,10 @@ LRESULT CALLBACK wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
         };
 
         // Draw texts
-        if (search_results.length) {
+        if (sb_count(search_results)) {
             int page = selected_result / line_count;
             int start = page * line_count;
-            int count = MINC(line_count, search_results.length - start);
+            int count = MINC(line_count, sb_count(search_results) - start);
             for (int idx = start; idx < start + count; idx++) {
                 // Set text color and color background
                 if (idx == selected_result) {
@@ -312,7 +336,7 @@ LRESULT CALLBACK wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
                 }
 
                 // Draw this line
-                DrawTextW(bfhdc, menu_entries.data[search_results.data[idx]], -1, &text_rect,
+                DrawTextW(bfhdc, menu_entries[search_results[idx]], -1, &text_rect,
                     DT_NOCLIP | DT_NOPREFIX | DT_END_ELLIPSIS);
                 text_rect.top += font_size;
 
@@ -348,7 +372,7 @@ void create_window(void)
     // Load font
     font = CreateFontA(font_size, 0, 0, 0,
         FW_NORMAL, 0, 0, 0, 0, 0, 0, 0x04, 0, font_name);
-    WE(font);
+    WINERR(font);
 
     // Register window class
     WNDCLASSEXW wc = { 0 };
@@ -357,7 +381,7 @@ void create_window(void)
     wc.lpszClassName = WLINES_WND_CLASS;
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-    WE(RegisterClassExW(&wc));
+    WINERR(RegisterClassExW(&wc));
 
     // Create window
     wnd_width = GetSystemMetrics(SM_CXSCREEN); // Display width
@@ -365,14 +389,14 @@ void create_window(void)
     main_wnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
         WLINES_WND_CLASS, L"wlines", WS_POPUP,
         0, 0, wnd_width, wnd_height, 0, 0, 0, 0);
-    WE(main_wnd);
+    WINERR(main_wnd);
 
     // Create textbox
     HWND textbox = CreateWindowExW(0, L"EDIT", L"",
         WS_VISIBLE | WS_CHILD | ES_LEFT | ES_AUTOVSCROLL | ES_AUTOHSCROLL,
         0, WLINES_MARGIN, wnd_width, font_size,
         main_wnd, (HMENU)101, 0, 0);
-    WE(textbox);
+    WINERR(textbox);
 
     SendMessage(textbox, WM_SETFONT, (WPARAM)font, MAKELPARAM(1, 0));
     prev_edit_wndproc = (WNDPROC)SetWindowLongPtr(textbox, GWL_WNDPROC, (LONG_PTR)&edit_wndproc);
@@ -384,7 +408,7 @@ void create_window(void)
 
     // Show window
     ShowWindow(main_wnd, SW_SHOW);
-    WE(UpdateWindow(main_wnd));
+    WINERR(UpdateWindow(main_wnd));
     SetForegroundWindow(main_wnd);
     SetFocus(textbox);
 
@@ -477,12 +501,12 @@ int main(int argc, char** argv)
     }
 
     // Read stdin
-    vec_wchar_t stdin_utf16 = { 0 };
-    read_stdin_as_utf8(&stdin_utf16);
+    wchar_t* stdin_utf16 = 0;
+    read_utf8_stdin_as_utf16(&stdin_utf16);
 
-    // Read entries
-    read_menu_entries(&stdin_utf16, &menu_entries);
-    line_count = MINC(line_count, menu_entries.length);
+    // Parse entries
+    parse_menu_entries(stdin_utf16);
+    line_count = MINC(line_count, sb_count(menu_entries));
     update_search_results(L"");
 
     // Show window
