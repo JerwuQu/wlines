@@ -65,9 +65,9 @@ void read_utf8_stdin_as_utf16(wchar_t** stdin_utf16)
     size_t len;
     char buf[128];
     char* stdin_utf8 = 0;
-    while ((len = fread(buf, 1, sizeof(buf), stdin))) {
+    while ((len = fread(buf, 1, sizeof(buf), stdin)))
         memcpy(sb_add(stdin_utf8, len), buf, len);
-    }
+
     sb_push(stdin_utf8, 0);
 
     // Convert to utf16
@@ -75,7 +75,6 @@ void read_utf8_stdin_as_utf16(wchar_t** stdin_utf16)
     sb_clear(*stdin_utf16);
     sb_add(*stdin_utf16, charcount);
     MultiByteToWideChar(CP_UTF8, 0, stdin_utf8, sb_count(stdin_utf8), *stdin_utf16, charcount);
-    sb_push(*stdin_utf16, 0);
 }
 
 void print_utf16_as_utf8(wchar_t* utf16str)
@@ -98,18 +97,21 @@ void parse_menu_entries(wchar_t* stdin_utf16)
     sb_clear(menu_entries);
 
     wchar_t* current = stdin_utf16;
-    int len = sb_count(stdin_utf16);
+    int current_len = 0;
+    int len = sb_count(stdin_utf16) - 1; // Ignore null-term
     for (int i = 0; i < len; i++) {
         if (stdin_utf16[i] == '\n') {
-            stdin_utf16[i] = 0;
+            stdin_utf16[i] = 0; // Set null-term for use in other functions
             sb_push(menu_entries, current);
+
             current = &stdin_utf16[i + 1];
-        }
+            current_len = 0;
+        } else
+            current_len++;
     }
 
-    if (current < stdin_utf16 + len) {
+    if (current_len)
         sb_push(menu_entries, current);
-    }
 }
 
 wchar_t* get_textbox_string(HWND textbox_wnd)
@@ -146,10 +148,9 @@ void update_search_results(wchar_t* search_str)
                 if (wcsstr(menu_entries[i], search_str))
                     sb_push(search_results, i);
         }
-    } else {
+    } else
         for (int i = 0; i < entry_count; i++)
             sb_push(search_results, i);
-    }
 
     selected_result = sb_count(search_results) ? 0 : -1;
 }
