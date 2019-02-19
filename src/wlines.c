@@ -46,18 +46,18 @@
 int wnd_width, wnd_height;
 HFONT font = 0;
 HWND main_wnd = 0;
-int line_count = 5;
+int line_count = 10;
 WNDPROC prev_edit_wndproc;
 
 wchar_t** menu_entries = 0;
 int selected_result = -1;
 int* search_results = 0;
 
-char* font_name = "Arial";
-int font_size = 18;
+char* font_name = "Verdana";
+int font_size = 24;
 char case_insensitive_search = 0;
-COLORREF clr_nrm_bg = 0x00000000, clr_nrm_fg = 0x00ffffff,
-         clr_sel_bg = 0x00ffffff, clr_sel_fg = 0x00000000;
+COLORREF clr_nrm_bg = 0x00222222, clr_nrm_fg = 0x00ffcc11,
+         clr_sel_bg = 0x00ffcc11, clr_sel_fg = 0x00000000;
 
 void read_utf8_stdin_as_utf16(wchar_t** stdin_utf16)
 {
