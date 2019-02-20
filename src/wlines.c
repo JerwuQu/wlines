@@ -159,6 +159,11 @@ void update_search_results(wchar_t* search_str)
 LRESULT CALLBACK edit_wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
     switch (msg) {
+    // When focus is lost
+    case WM_KILLFOCUS:
+        exit(1);
+
+    // When a character is written
     case WM_CHAR:;
         LRESULT result = 0;
         switch (wparam) {
@@ -203,6 +208,7 @@ LRESULT CALLBACK edit_wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
         RedrawWindow(main_wnd, 0, 0, RDW_INVALIDATE);
         return result;
 
+    // When a key is pressed
     case WM_KEYDOWN:
         switch (wparam) {
         // Enter - Output choice
