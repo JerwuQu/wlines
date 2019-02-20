@@ -451,7 +451,7 @@ void usage(void)
 
 void version(void)
 {
-    fprintf(stderr, "wlines (rev " WLINES_REVISION ")\n");
+    fprintf(stderr, "wlines (" WLINES_REVISION ")\n");
     exit(0);
 }
 

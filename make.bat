@@ -6,7 +6,7 @@ set SRC=src/wlines.c
 set LIB=-lgdi32 -luser32 -lshlwapi
 set OPT=all release debug test clean
 set DEF=WLINES_REVISION
-for /f %%a in ('git rev-parse --short HEAD') do (set REV=%%a)
+for /f %%a in ('git log -1 --date=short "--format=%%cd-%%h"') do (set REV=%%a)
 
 goto :main
 
