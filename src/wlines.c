@@ -41,7 +41,7 @@
 // Constants
 #define WLINES_WND_CLASS L"wlines_wnd"
 #define WLINES_MARGIN 4
-#define WLINES_FOCUS_TIMER 1
+#define WLINES_FOREGROUND_TIMER 1
 
 // Globals
 int wnd_width, wnd_height;
@@ -163,11 +163,6 @@ LRESULT CALLBACK edit_wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
     // When focus is lost
     case WM_KILLFOCUS:
         exit(1);
-
-    // Repeating timer to make sure we're focused
-    case WM_TIMER:
-        if (wparam == WLINES_FOCUS_TIMER && GetFocus() != wnd)
-            exit(1);
 
     // When a character is written
     case WM_CHAR:;
@@ -297,6 +292,12 @@ LRESULT CALLBACK edit_wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 LRESULT CALLBACK wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
     switch (msg) {
+    // Repeating timer to make sure we're the foreground window
+    case WM_TIMER:
+        if (wparam == WLINES_FOREGROUND_TIMER && GetForegroundWindow() != wnd)
+            exit(1);
+
+    // Paint window
     case WM_PAINT:;
         // Begin
         PAINTSTRUCT ps = { 0 };
@@ -366,6 +367,7 @@ LRESULT CALLBACK wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
         EndPaint(wnd, &ps);
         return 0;
 
+    // Textbox colors
     case WM_CTLCOLOREDIT:;
         HDC hdc = (HDC)wparam;
         SetTextColor(hdc, clr_nrm_fg);
@@ -425,8 +427,8 @@ void create_window(void)
     SetForegroundWindow(main_wnd);
     SetFocus(textbox);
 
-    // Start focus timer
-    SetTimer(textbox, WLINES_FOCUS_TIMER, 50, 0);
+    // Start foreground timer
+    SetTimer(main_wnd, WLINES_FOREGROUND_TIMER, 50, 0);
 
     // Event loop
     MSG msg;
