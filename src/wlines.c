@@ -41,6 +41,7 @@
 // Constants
 #define WLINES_WND_CLASS L"wlines_wnd"
 #define WLINES_MARGIN 4
+#define WLINES_FOCUS_TIMER 1
 
 // Globals
 int wnd_width, wnd_height;
@@ -162,6 +163,11 @@ LRESULT CALLBACK edit_wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
     // When focus is lost
     case WM_KILLFOCUS:
         exit(1);
+
+    // Repeating timer to make sure we're focused
+    case WM_TIMER:
+        if (wparam == WLINES_FOCUS_TIMER && GetFocus() != wnd)
+            exit(1);
 
     // When a character is written
     case WM_CHAR:;
@@ -418,6 +424,9 @@ void create_window(void)
     WINERR(UpdateWindow(main_wnd));
     SetForegroundWindow(main_wnd);
     SetFocus(textbox);
+
+    // Start focus timer
+    SetTimer(textbox, WLINES_FOCUS_TIMER, 50, 0);
 
     // Event loop
     MSG msg;
