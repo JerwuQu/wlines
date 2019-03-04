@@ -18,7 +18,7 @@ exit /b
 :test
 call :debug
 if %ERRORLEVEL% NEQ 0 (exit /b)
-type test_input.txt | %PRJ%-debug.exe -i -l 7
+type test_input.txt | %PRJ%-debug.exe -i -l 7 -p "Hello World"
 echo Error code: %ERRORLEVEL%
 exit /b
 

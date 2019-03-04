@@ -24,7 +24,7 @@
     } while (0)
 
 // OOM handler for SB
-#define STRETCHY_BUFFER_OUT_OF_MEMORY OOMERR(1)
+#define STRETCHY_BUFFER_OUT_OF_MEMORY OOMERR(0)
 
 // Libs
 #include <Windows.h>
@@ -42,6 +42,7 @@
 #define WLINES_WND_CLASS L"wlines_wnd"
 #define WLINES_MARGIN 4
 #define WLINES_FOREGROUND_TIMER 1
+#define WLINES_DRAWTEXT_PARAMS (DT_NOCLIP | DT_NOPREFIX | DT_END_ELLIPSIS)
 
 // Globals
 int wnd_width, wnd_height;
@@ -59,6 +60,9 @@ int font_size = 24;
 char case_insensitive_search = 0;
 COLORREF clr_nrm_bg = 0x00222222, clr_nrm_fg = 0x00ffcc11,
          clr_sel_bg = 0x00ffcc11, clr_sel_fg = 0x00000000;
+
+char* prompt_text = 0;
+int prompt_width = 0;
 
 void read_utf8_stdin_as_utf16(wchar_t** stdin_utf16)
 {
@@ -319,23 +323,32 @@ LRESULT CALLBACK wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
             SetBkMode(bfhdc, TRANSPARENT);
         }
 
-        // Set colors
-        SetTextColor(bfhdc, clr_nrm_fg);
+        // Clear window
         SetDCPenColor(bfhdc, clr_nrm_bg);
         SetDCBrushColor(bfhdc, clr_nrm_bg);
-
-        // Clear
         Rectangle(bfhdc, 0, 0, wnd_width, wnd_height);
+        SetDCPenColor(bfhdc, clr_sel_bg);
+        SetDCBrushColor(bfhdc, clr_sel_bg);
 
         // Text rect
         RECT text_rect = {
             .left = WLINES_MARGIN,
-            .top = font_size + WLINES_MARGIN * 2,
+            .top = WLINES_MARGIN,
             .right = wnd_width - WLINES_MARGIN,
             .bottom = wnd_height
         };
 
+        // Draw prompt text
+        if (prompt_text) {
+            Rectangle(bfhdc, 0, WLINES_MARGIN, prompt_width, font_size + WLINES_MARGIN);
+            SetTextColor(bfhdc, clr_sel_fg);
+            DrawTextA(bfhdc, prompt_text, -1, &text_rect, WLINES_DRAWTEXT_PARAMS);
+        }
+
+        text_rect.top += font_size + WLINES_MARGIN;
+
         // Draw texts
+        SetTextColor(bfhdc, clr_nrm_fg);
         if (sb_count(search_results)) {
             int page = selected_result / line_count;
             int start = page * line_count;
@@ -343,15 +356,13 @@ LRESULT CALLBACK wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
             for (int idx = start; idx < start + count; idx++) {
                 // Set text color and color background
                 if (idx == selected_result) {
-                    SetTextColor(bfhdc, clr_sel_fg);
-                    SetDCPenColor(bfhdc, clr_sel_bg);
-                    SetDCBrushColor(bfhdc, clr_sel_bg);
                     Rectangle(bfhdc, 0, text_rect.top, wnd_width, text_rect.top + font_size);
+                    SetTextColor(bfhdc, clr_sel_fg);
                 }
 
                 // Draw this line
-                DrawTextW(bfhdc, menu_entries[search_results[idx]], -1, &text_rect,
-                    DT_NOCLIP | DT_NOPREFIX | DT_END_ELLIPSIS);
+                DrawTextW(bfhdc, menu_entries[search_results[idx]], -1,
+                    &text_rect, WLINES_DRAWTEXT_PARAMS);
                 text_rect.top += font_size;
 
                 // Reset text colors
@@ -382,13 +393,34 @@ LRESULT CALLBACK wndproc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
     return DefWindowProc(wnd, msg, wparam, lparam);
 }
 
-void create_window(void)
+void load_assets(void)
 {
     // Load font
     font = CreateFontA(font_size, 0, 0, 0,
         FW_NORMAL, 0, 0, 0, 0, 0, 0, 0x04, 0, font_name);
     WINERR(font);
+}
 
+int calc_text_width(char* text)
+{
+    static HDC bogus_dc = 0;
+    if (!bogus_dc) {
+        WINERR(bogus_dc = CreateCompatibleDC(CreateDCA("DISPLAY", 0, 0, 0)));
+        SelectObject(bogus_dc, font);
+    }
+
+    RECT r = {
+        .left = 0,
+        .top = 0,
+        .right = 1000,
+        .bottom = 1000
+    };
+    DrawTextA(bogus_dc, text, -1, &r, WLINES_DRAWTEXT_PARAMS | DT_CALCRECT);
+    return r.right;
+}
+
+void create_window(void)
+{
     // Register window class
     WNDCLASSEXW wc = { 0 };
     wc.cbSize = sizeof(WNDCLASSEXW);
@@ -407,14 +439,15 @@ void create_window(void)
     WINERR(main_wnd);
 
     // Create textbox
-    HWND textbox = CreateWindowExW(0, L"EDIT", L"",
+    prompt_width = prompt_text ? calc_text_width(prompt_text) + WLINES_MARGIN * 2 : 0;
+    HWND textbox_wnd = CreateWindowExW(0, L"EDIT", L"",
         WS_VISIBLE | WS_CHILD | ES_LEFT | ES_AUTOVSCROLL | ES_AUTOHSCROLL,
-        0, WLINES_MARGIN, wnd_width, font_size,
+        prompt_width, WLINES_MARGIN, wnd_width, font_size,
         main_wnd, (HMENU)101, 0, 0);
-    WINERR(textbox);
+    WINERR(textbox_wnd);
 
-    SendMessage(textbox, WM_SETFONT, (WPARAM)font, MAKELPARAM(1, 0));
-    prev_edit_wndproc = (WNDPROC)SetWindowLongPtr(textbox, GWL_WNDPROC, (LONG_PTR)&edit_wndproc);
+    SendMessage(textbox_wnd, WM_SETFONT, (WPARAM)font, MAKELPARAM(1, 0));
+    prev_edit_wndproc = (WNDPROC)SetWindowLongPtr(textbox_wnd, GWL_WNDPROC, (LONG_PTR)&edit_wndproc);
 
     // Remove default window styling
     LONG lStyle = GetWindowLong(main_wnd, GWL_STYLE);
@@ -425,7 +458,7 @@ void create_window(void)
     ShowWindow(main_wnd, SW_SHOW);
     WINERR(UpdateWindow(main_wnd));
     SetForegroundWindow(main_wnd);
-    SetFocus(textbox);
+    SetFocus(textbox_wnd);
 
     // Start foreground timer
     SetTimer(main_wnd, WLINES_FOREGROUND_TIMER, 50, 0);
@@ -446,6 +479,7 @@ void usage(void)
         "  -v              Print version information\n"
         "  -i              Case-insensitive filter\n"
         "  -l  <count>     Amount of lines to show in list\n"
+        "  -p  <text>      Prompt to show in front of input\n"
         "  -nb <color>     Normal background color\n"
         "  -nf <color>     Normal foreground color\n"
         "  -sb <color>     Selected background color\n"
@@ -500,7 +534,9 @@ int main(int argc, char** argv)
             line_count = atoi(argv[++i]);
             if (line_count < 1)
                 usage();
-        } else if (!strcmp(argv[i], "-nb"))
+        } else if (!strcmp(argv[i], "-p"))
+            prompt_text = argv[++i]; // todo: parse as utf8?
+        else if (!strcmp(argv[i], "-nb"))
             clr_nrm_bg = parse_hex(argv[++i]);
         else if (!strcmp(argv[i], "-nf"))
             clr_nrm_fg = parse_hex(argv[++i]);
@@ -528,6 +564,7 @@ int main(int argc, char** argv)
     update_search_results(L"");
 
     // Show window
+    load_assets();
     create_window();
 
     return -1;
