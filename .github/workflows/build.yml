@@ -1,0 +1,30 @@
+name: Build
+on: [push]
+jobs:
+  windows_build:
+    name: Windows build
+    runs-on: windows-latest
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v1
+    - name: Get TCC and WinAPI headers
+      run: |
+        Invoke-WebRequest -OutFile tcc.zip https://download.savannah.gnu.org/releases/tinycc/tcc-0.9.27-win32-bin.zip
+        Expand-Archive -DestinationPath . tcc.zip
+
+        Invoke-WebRequest -OutFile tcc-winapi.zip https://download.savannah.gnu.org/releases/tinycc/winapi-full-for-0.9.27.zip
+        Expand-Archive tcc-winapi.zip
+        Copy-Item -Force -Recurse tcc-winapi/*/* tcc/
+
+        echo "::add-path::$(Resolve-Path -Path tcc | Select -ExpandProperty Path)"
+    - name: Patch missing GDI functions into TCC lib
+      run: |
+        echo "SetDCPenColor" >> tcc/lib/gdi32.def
+        echo "SetDCBrushColor" >> tcc/lib/gdi32.def
+    - name: Build
+      run: ./make.bat
+    - name: Upload artifact
+      uses: actions/upload-artifact@master
+      with:
+        name: wlines
+        path: wlines.exe

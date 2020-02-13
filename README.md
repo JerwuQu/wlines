@@ -4,7 +4,7 @@ Dynamic menu for Windows - inspired by the [suckless](https://suckless.org/) [dm
 
 ### Download
 
-A compiled binary for the latest commit can always be found [on AppVeyor](https://ci.appveyor.com/project/JerwuQu/wlines/build/artifacts).
+A compiled binary for the latest commit can always be found in [Github Actions](https://github.com/JerwuQu/wlines/actions).
 
 ### Usage
 
