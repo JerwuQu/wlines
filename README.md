@@ -4,7 +4,9 @@ Dynamic menu for Windows - inspired by the [suckless](https://suckless.org/) [dm
 
 ### Download
 
-A compiled binary for the latest commit can always be found in [Github Actions](https://github.com/JerwuQu/wlines/actions).
+~~A compiled binary for the latest commit can always be found in [Github Actions](https://github.com/JerwuQu/wlines/actions)~~.
+
+Apparently even Github Actions binaries expire, see the [Releases page](https://github.com/JerwuQu/wlines/releases) instead.
 
 ### Usage
 
