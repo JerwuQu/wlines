@@ -1,3 +1,4 @@
-tcc/
-*.sublime-workspace
 *.exe
+compile_commands.json
+.cache/
+test.sh
