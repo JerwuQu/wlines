@@ -4,7 +4,7 @@ Dynamic menu for Windows - inspired by the [suckless](https://suckless.org/) [dm
 
 ### Download
 
-See the [Releases page](https://github.com/JerwuQu/wlines/releases).
+See the [latest release](https://github.com/JerwuQu/wlines/releases/latest).
 
 ### Usage
 
