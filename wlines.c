@@ -263,6 +263,8 @@ LRESULT CALLBACK mainWndProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 				state->hadForeground = true;
 			} else if (state->hadForeground) {
 				exit(1);
+			} else {
+				SetForegroundWindow(wnd);
 			}
 		}
 		break;
@@ -389,12 +391,11 @@ void createWindow(state_t *state)
 	ShowWindow(state->mainWnd, SW_SHOW);
 	ASSERT_WIN32_RESULT(UpdateWindow(state->mainWnd));
 	SetForegroundWindow(state->mainWnd);
-	SetCapture(state->mainWnd);
 	SetActiveWindow(state->mainWnd);
 	SetFocus(state->editWnd);
 
 	// Start foreground timer
-	SetTimer(state->mainWnd, FOREGROUND_TIMER_ID, 100, 0);
+	SetTimer(state->mainWnd, FOREGROUND_TIMER_ID, 50, 0);
 }
 
 void parseStdinEntries(state_t *state)
