@@ -8,6 +8,7 @@
 #undef _MBCS
 
 #include <windows.h>
+#include <windowsx.h>
 #include <shlwapi.h>
 
 #include <stdint.h>
@@ -156,6 +157,10 @@ void updateSearchResults(state_t *state)
 LRESULT CALLBACK editWndProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
 	state_t *state = (state_t*)GetWindowLongPtrA(wnd, GWLP_USERDATA);
+	if (!state) {
+		return DefWindowProc(wnd, msg, wparam, lparam);
+	}
+
 	switch (msg) {
 	case WM_KILLFOCUS: // When focus is lost
 		exit(1);
@@ -256,6 +261,14 @@ LRESULT CALLBACK editWndProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 LRESULT CALLBACK mainWndProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
 	state_t *state = (state_t*)GetWindowLongPtrA(wnd, GWLP_USERDATA);
+	if (!state) {
+		return DefWindowProc(wnd, msg, wparam, lparam);
+	}
+
+	const int textStartTop = state->settings.fontSize + state->settings.margin * 2;
+	const size_t page = state->selectedResultIndex / state->lineCount;
+	const size_t pageStartI = page * state->lineCount;
+
 	switch (msg) {
 	case WM_TIMER: // Repeating timer to make sure we're the foreground window
 		if (wparam == FOREGROUND_TIMER_ID) {
@@ -297,7 +310,7 @@ LRESULT CALLBACK mainWndProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		// Text rect
 		RECT textRect = {
 			.left = state->settings.margin,
-			.top = state->settings.fontSize + state->settings.margin * 2,
+			.top = textStartTop,
 			.right = state->width - state->settings.margin,
 			.bottom = state->height,
 		};
@@ -305,10 +318,8 @@ LRESULT CALLBACK mainWndProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		// Draw texts
 		SetTextColor(bfhdc, state->settings.fg);
 		if (state->searchResultCount) {
-			const size_t page = state->selectedResultIndex / state->lineCount;
-			const size_t startI = page * state->lineCount;
-			const size_t count = min(state->lineCount, state->searchResultCount - startI);
-			for (size_t idx = startI; idx < startI + count; idx++) {
+			const size_t count = min(state->lineCount, state->searchResultCount - pageStartI);
+			for (size_t idx = pageStartI; idx < pageStartI + count; idx++) {
 				// Set text color and color background
 				if (idx == state->selectedResultIndex) {
 					SetDCPenColor(bfhdc, state->settings.bgSelect);
@@ -343,6 +354,28 @@ LRESULT CALLBACK mainWndProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		return (LRESULT)GetStockObject(DC_BRUSH);
 	case WM_CLOSE:
 		exit(1);
+	case WM_LBUTTONDOWN:;
+		const size_t newIdx = max(0, min(state->searchResultCount - 1,
+			pageStartI + (GET_Y_LPARAM(lparam) - textStartTop) / state->settings.fontSize));
+		if (newIdx == state->selectedResultIndex) {
+			printUtf16AsUtf8(state->entries[state->searchResults[state->selectedResultIndex]]);
+
+			// Quit if control isn't held
+			if (!(GetKeyState(VK_CONTROL) & 0x8000)) {
+				exit(0);
+			}
+		} else {
+			state->selectedResultIndex = newIdx;
+			RedrawWindow(state->mainWnd, 0, 0, RDW_INVALIDATE);
+		}
+		return 0;
+	case WM_MOUSEWHEEL:;
+		const int ydelta = GET_WHEEL_DELTA_WPARAM(wparam) / WHEEL_DELTA;
+		state->selectedResultIndex = max(0,
+			min((ssize_t)(state->searchResultCount - 1),
+			(ssize_t)(state->selectedResultIndex - ydelta)));
+		RedrawWindow(state->mainWnd, 0, 0, RDW_INVALIDATE);
+		return 0;
 	}
 
 	return DefWindowProc(wnd, msg, wparam, lparam);
@@ -427,7 +460,7 @@ void parseStdinEntries(state_t *state)
 		if (stdinUtf16[i] == '\n' || i == charCount - 1) {
 			bufAdd(&entryBuf, sizeof(wchar_t*));
 			((wchar_t**)entryBuf.data)[state->entryCount] = &stdinUtf16[lineStartI];
-			stdinUtf16[i] = 0; // set null terminator
+			stdinUtf16[i + (stdinUtf16[i] != '\n')] = 0; // set null terminator
 			lineStartI = i + 1;
 			state->entryCount++;
 		}
