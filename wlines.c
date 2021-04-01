@@ -26,11 +26,13 @@
 
 #define FOREGROUND_TIMER_ID 1
 #define SELECTED_INDEX_NO_RESULT ((size_t)-1)
+#define DRAWTEXT_PARAMS (DT_NOCLIP | DT_NOPREFIX | DT_END_ELLIPSIS)
 
 typedef struct {
 	wchar_t *wndClass;
 	int margin;
 	char *fontName;
+	char *promptText;
 	int fontSize;
 	bool caseSensitiveSearch;
 	COLORREF bg, fg, bgSelect, fgSelect;
@@ -265,7 +267,7 @@ LRESULT CALLBACK mainWndProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		return DefWindowProc(wnd, msg, wparam, lparam);
 	}
 
-	const int textStartTop = state->settings.fontSize + state->settings.margin * 2;
+	const int entriesTop = state->settings.fontSize + state->settings.margin * 2;
 	const size_t page = state->selectedResultIndex / state->lineCount;
 	const size_t pageStartI = page * state->lineCount;
 
@@ -307,15 +309,32 @@ LRESULT CALLBACK mainWndProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		SetDCBrushColor(bfhdc, state->settings.bg);
 		Rectangle(bfhdc, 0, 0, state->width, state->height);
 
-		// Text rect
+		// Draw prompt
+		if (state->settings.promptText) {
+			RECT promptRect = {
+				.left = state->settings.margin,
+				.top = state->settings.margin,
+				.right = state->width / 2,
+				.bottom = state->settings.fontSize * 2,
+			};
+
+			SetDCPenColor(bfhdc, state->settings.bgSelect);
+			SetDCBrushColor(bfhdc, state->settings.bgSelect);
+			Rectangle(bfhdc, 0, promptRect.top,
+					promptRect.right + state->settings.margin * 2,
+					state->settings.fontSize + state->settings.margin);
+
+			SetTextColor(bfhdc, state->settings.fgSelect);
+			DrawTextA(bfhdc, state->settings.promptText, -1, &promptRect, DRAWTEXT_PARAMS);
+		}
+
+		// Draw texts
 		RECT textRect = {
 			.left = state->settings.margin,
-			.top = textStartTop,
+			.top = entriesTop,
 			.right = state->width - state->settings.margin,
 			.bottom = state->height,
 		};
-
-		// Draw texts
 		SetTextColor(bfhdc, state->settings.fg);
 		if (state->searchResultCount) {
 			const size_t count = min(state->lineCount, state->searchResultCount - pageStartI);
@@ -330,7 +349,7 @@ LRESULT CALLBACK mainWndProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 
 				// Draw this line
 				DrawTextW(bfhdc, state->entries[state->searchResults[idx]], -1,
-					&textRect, DT_NOCLIP | DT_NOPREFIX | DT_END_ELLIPSIS);
+						&textRect, DRAWTEXT_PARAMS);
 				textRect.top += state->settings.fontSize;
 
 				// Reset text colors
@@ -356,7 +375,7 @@ LRESULT CALLBACK mainWndProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		exit(1);
 	case WM_LBUTTONDOWN:;
 		const size_t newIdx = max(0, min(state->searchResultCount - 1,
-			pageStartI + (GET_Y_LPARAM(lparam) - textStartTop) / state->settings.fontSize));
+				pageStartI + (GET_Y_LPARAM(lparam) - entriesTop) / state->settings.fontSize));
 		if (newIdx == state->selectedResultIndex) {
 			printUtf16AsUtf8(state->entries[state->searchResults[state->selectedResultIndex]]);
 
@@ -372,8 +391,8 @@ LRESULT CALLBACK mainWndProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	case WM_MOUSEWHEEL:;
 		const int ydelta = GET_WHEEL_DELTA_WPARAM(wparam) / WHEEL_DELTA;
 		state->selectedResultIndex = max(0,
-			min((ssize_t)(state->searchResultCount - 1),
-			(ssize_t)(state->selectedResultIndex - ydelta)));
+				min((ssize_t)(state->searchResultCount - 1),
+				(ssize_t)(state->selectedResultIndex - ydelta)));
 		RedrawWindow(state->mainWnd, 0, 0, RDW_INVALIDATE);
 		return 0;
 	}
@@ -397,14 +416,33 @@ void createWindow(state_t *state)
 	state->width = GetSystemMetrics(SM_CXSCREEN); // Display width
 	state->height = state->settings.fontSize * (state->lineCount + 1) + state->settings.margin * 3;
 	state->mainWnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
-		state->settings.wndClass, L"wlines", WS_POPUP,
-		0, 0, state->width, state->height, 0, 0, 0, 0);
+			state->settings.wndClass, L"wlines", WS_POPUP,
+			0, 0, state->width, state->height, 0, 0, 0, 0);
 	ASSERT_WIN32_RESULT(state->mainWnd);
+
+	// Calculate prompt width
+	size_t textboxLeft = 0;
+	if (state->settings.promptText) {
+		RECT promptRect = {
+			.left = state->settings.margin,
+			.top = state->settings.margin,
+			.right = state->width / 2,
+			.bottom = state->settings.fontSize * 2,
+		};
+
+		const HDC tmpHDC = CreateCompatibleDC(NULL);
+		SelectObject(tmpHDC, state->font);
+		DrawTextA(tmpHDC, state->settings.promptText, -1,
+				&promptRect, DRAWTEXT_PARAMS | DT_CALCRECT);
+		DeleteDC(tmpHDC);
+		textboxLeft += promptRect.right + state->settings.margin;
+	}
 
 	// Create textbox
 	state->editWnd = CreateWindowExW(0, L"EDIT", L"",
 		WS_VISIBLE | WS_CHILD | ES_LEFT | ES_AUTOVSCROLL | ES_AUTOHSCROLL,
-		0, state->settings.margin, state->width, state->settings.fontSize,
+		textboxLeft, state->settings.margin,
+		state->width - textboxLeft, state->settings.fontSize,
 		state->mainWnd, (HMENU)101, 0, 0);
 	ASSERT_WIN32_RESULT(state->editWnd);
 
@@ -442,7 +480,7 @@ void parseStdinEntries(state_t *state)
 	}
 
 	if (!stdinUtf8.count) {
-		fprintf(stderr, "No input. Exiting.\n");
+		fprintf(stderr, "No input. Exiting.\n"); // TODO: support empty input
 		exit(1);
 	}
 
@@ -511,6 +549,7 @@ void usage()
 		"\t-cs   Case-sensitive filter\n"
 		"OPTIONS:\n"
 		"\t-l    <count>   Amount of lines to show in list\n"
+		"\t-p    <text>    Prompt to show before input\n"
 		"\t-si   <index>   Initial selected line index\n"
 		"\t-bg   <hex>     Background color\n"
 		"\t-fg   <hex>     Foreground color\n"
@@ -558,6 +597,10 @@ int main(int argc, char **argv)
 			if (state.settings.lineCount < 1) {
 				usage();
 			}
+		} else if (!strcmp(argv[i], "-p")) {
+			// TODO: encoding for windows arugments is strange
+			//       look into using `wmain` or `GetCommandLineW`
+			state.settings.promptText = argv[++i];
 		} else if (!strcmp(argv[i], "-si")) {
 			state.settings.selectedIndex = atoi(argv[++i]);
 			if (state.settings.selectedIndex < 0) {
