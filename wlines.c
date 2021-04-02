@@ -27,17 +27,20 @@
 #define FOREGROUND_TIMER_ID 1
 #define SELECTED_INDEX_NO_RESULT ((size_t)-1)
 #define DRAWTEXT_PARAMS (DT_NOCLIP | DT_NOPREFIX | DT_END_ELLIPSIS)
+#define FONT_HMARGIN(sz) (int)(state->settings.fontSize / 6)
 
 typedef struct {
 	wchar_t *wndClass;
-	int margin;
+	int padding;
 	char *fontName;
 	char *promptText;
 	int fontSize;
 	bool caseSensitiveSearch;
-	COLORREF bg, fg, bgSelect, fgSelect;
+	COLORREF bg, fg, bgSelect, fgSelect, bgEdit, fgEdit;
 	int lineCount;
 	int selectedIndex;
+	size_t width;
+	bool centerWindow;
 } settings_t;
 
 typedef struct {
@@ -48,6 +51,7 @@ typedef struct {
 	size_t width, height;
 	size_t lineCount;
 	bool hadForeground;
+	size_t promptWidth;
 
 	size_t entryCount;
 	wchar_t **entries;
@@ -267,8 +271,8 @@ LRESULT CALLBACK mainWndProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		return DefWindowProc(wnd, msg, wparam, lparam);
 	}
 
-	const int entriesTop = state->settings.fontSize + state->settings.margin * 2;
-	const size_t page = state->selectedResultIndex / state->lineCount;
+	const int entriesTop = state->settings.fontSize + state->settings.padding;
+	const size_t page = state->lineCount ? (state->selectedResultIndex / state->lineCount) : 0;
 	const size_t pageStartI = page * state->lineCount;
 
 	switch (msg) {
@@ -312,17 +316,17 @@ LRESULT CALLBACK mainWndProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		// Draw prompt
 		if (state->settings.promptText) {
 			RECT promptRect = {
-				.left = state->settings.margin,
-				.top = state->settings.margin,
-				.right = state->width / 2,
-				.bottom = state->settings.fontSize * 2,
+				.left = state->settings.padding + FONT_HMARGIN(state->settings.fontSize),
+				.top = state->settings.padding,
+				.right = state->width / 2 - FONT_HMARGIN(state->settings.fontSize),
+				.bottom = state->settings.padding + state->settings.fontSize * 2,
 			};
 
 			SetDCPenColor(bfhdc, state->settings.bgSelect);
 			SetDCBrushColor(bfhdc, state->settings.bgSelect);
-			Rectangle(bfhdc, 0, promptRect.top,
-					promptRect.right + state->settings.margin * 2,
-					state->settings.fontSize + state->settings.margin);
+			Rectangle(bfhdc, state->settings.padding, promptRect.top,
+					state->settings.padding + state->promptWidth,
+					promptRect.top + state->settings.fontSize);
 
 			SetTextColor(bfhdc, state->settings.fgSelect);
 			DrawTextA(bfhdc, state->settings.promptText, -1, &promptRect, DRAWTEXT_PARAMS);
@@ -330,32 +334,32 @@ LRESULT CALLBACK mainWndProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 
 		// Draw texts
 		RECT textRect = {
-			.left = state->settings.margin,
+			.left = state->settings.padding + FONT_HMARGIN(state->settings.fontSize),
 			.top = entriesTop,
-			.right = state->width - state->settings.margin,
+			.right = state->width - state->settings.padding - FONT_HMARGIN(state->settings.fontSize),
 			.bottom = state->height,
 		};
 		SetTextColor(bfhdc, state->settings.fg);
-		if (state->searchResultCount) {
-			const size_t count = min(state->lineCount, state->searchResultCount - pageStartI);
-			for (size_t idx = pageStartI; idx < pageStartI + count; idx++) {
-				// Set text color and color background
-				if (idx == state->selectedResultIndex) {
-					SetDCPenColor(bfhdc, state->settings.bgSelect);
-					SetDCBrushColor(bfhdc, state->settings.bgSelect);
-					Rectangle(bfhdc, 0, textRect.top, state->width, textRect.top + state->settings.fontSize);
-					SetTextColor(bfhdc, state->settings.fgSelect);
-				}
+		const size_t count = min(state->lineCount, state->searchResultCount - pageStartI);
+		for (size_t idx = pageStartI; idx < pageStartI + count; idx++) {
+			// Set text color and color background
+			if (idx == state->selectedResultIndex) {
+				SetDCPenColor(bfhdc, state->settings.bgSelect);
+				SetDCBrushColor(bfhdc, state->settings.bgSelect);
+				Rectangle(bfhdc, state->settings.padding, textRect.top,
+						state->width - state->settings.padding,
+						textRect.top + state->settings.fontSize);
+				SetTextColor(bfhdc, state->settings.fgSelect);
+			}
 
-				// Draw this line
-				DrawTextW(bfhdc, state->entries[state->searchResults[idx]], -1,
-						&textRect, DRAWTEXT_PARAMS);
-				textRect.top += state->settings.fontSize;
+			// Draw this line
+			DrawTextW(bfhdc, state->entries[state->searchResults[idx]], -1,
+					&textRect, DRAWTEXT_PARAMS);
+			textRect.top += state->settings.fontSize;
 
-				// Reset text colors
-				if (idx == state->selectedResultIndex) {
-					SetTextColor(bfhdc, state->settings.fg);
-				}
+			// Reset text colors
+			if (idx == state->selectedResultIndex) {
+				SetTextColor(bfhdc, state->settings.fg);
 			}
 		}
 
@@ -367,9 +371,9 @@ LRESULT CALLBACK mainWndProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		return 0;
 	case WM_CTLCOLOREDIT:; // Textbox colors
 		HDC hdc = (HDC)wparam;
-		SetTextColor(hdc, state->settings.fg);
-		SetBkColor(hdc, state->settings.bg);
-		SetDCBrushColor(hdc, state->settings.bg);
+		SetTextColor(hdc, state->settings.fgEdit);
+		SetBkColor(hdc, state->settings.bgEdit);
+		SetDCBrushColor(hdc, state->settings.bgEdit);
 		return (LRESULT)GetStockObject(DC_BRUSH);
 	case WM_CLOSE:
 		exit(1);
@@ -413,40 +417,56 @@ void createWindow(state_t *state)
 	ASSERT_WIN32_RESULT(RegisterClassExW(&wc));
 
 	// Create window
-	state->width = GetSystemMetrics(SM_CXSCREEN); // Display width
-	state->height = state->settings.fontSize * (state->lineCount + 1) + state->settings.margin * 3;
+	const int displayWidth = GetSystemMetrics(SM_CXSCREEN);
+	const int displayHeight = GetSystemMetrics(SM_CYSCREEN);
+
+	if (state->settings.width) {
+		state->width = state->settings.width;
+	} else {
+		state->width = displayWidth;
+	}
+	state->height = state->settings.fontSize * (state->lineCount + 1)
+			+ state->settings.padding * 2;
+
+	int x = 0, y = 0;
+	if (state->settings.centerWindow) {
+		x = (displayWidth - state->width) / 2;
+		y = (displayHeight - state->height) / 2;
+	}
+
 	state->mainWnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
 			state->settings.wndClass, L"wlines", WS_POPUP,
-			0, 0, state->width, state->height, 0, 0, 0, 0);
+			x, y, state->width, state->height, 0, 0, 0, 0);
 	ASSERT_WIN32_RESULT(state->mainWnd);
 
 	// Calculate prompt width
-	size_t textboxLeft = 0;
 	if (state->settings.promptText) {
 		RECT promptRect = {
-			.left = state->settings.margin,
-			.top = state->settings.margin,
-			.right = state->width / 2,
+			.right = state->width / 2 - state->settings.padding,
 			.bottom = state->settings.fontSize * 2,
 		};
-
 		const HDC tmpHDC = CreateCompatibleDC(NULL);
 		SelectObject(tmpHDC, state->font);
 		DrawTextA(tmpHDC, state->settings.promptText, -1,
 				&promptRect, DRAWTEXT_PARAMS | DT_CALCRECT);
 		DeleteDC(tmpHDC);
-		textboxLeft += promptRect.right + state->settings.margin;
+		state->promptWidth = promptRect.right - promptRect.left
+				+ FONT_HMARGIN(state->settings.fontSize) * 2;
 	}
 
 	// Create textbox
+	const size_t textboxLeft = state->settings.padding + state->promptWidth;
 	state->editWnd = CreateWindowExW(0, L"EDIT", L"",
 		WS_VISIBLE | WS_CHILD | ES_LEFT | ES_AUTOVSCROLL | ES_AUTOHSCROLL,
-		textboxLeft, state->settings.margin,
-		state->width - textboxLeft, state->settings.fontSize,
+		textboxLeft, state->settings.padding,
+		state->width - textboxLeft - state->settings.padding, state->settings.fontSize,
 		state->mainWnd, (HMENU)101, 0, 0);
 	ASSERT_WIN32_RESULT(state->editWnd);
 
 	SendMessage(state->editWnd, WM_SETFONT, (WPARAM)state->font, MAKELPARAM(1, 0));
+	SendMessage(state->editWnd, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN,
+			MAKELPARAM(FONT_HMARGIN(state->settings.fontSize),
+				FONT_HMARGIN(state->settings.fontSize)));
 	state->editWndProc = (WNDPROC)SetWindowLongPtr(state->editWnd, GWLP_WNDPROC, (LONG_PTR)&editWndProc);
 
 	// Add state pointer
@@ -479,15 +499,11 @@ void parseStdinEntries(state_t *state)
 		memcpy(bufAdd(&stdinUtf8, lineLen), buf, lineLen);
 	}
 
-	if (!stdinUtf8.count) {
-		fprintf(stderr, "No input. Exiting.\n"); // TODO: support empty input
-		exit(1);
-	}
-
 	// Convert to utf16
 	const size_t charCount = MultiByteToWideChar(CP_UTF8, 0, stdinUtf8.data, stdinUtf8.count, 0, 0);
 	wchar_t *stdinUtf16 = xrealloc(0, charCount * 2);
-	ASSERT_WIN32_RESULT(MultiByteToWideChar(CP_UTF8, 0, stdinUtf8.data, stdinUtf8.count, stdinUtf16, charCount));
+	memset(stdinUtf16, 0, charCount * 2);
+	MultiByteToWideChar(CP_UTF8, 0, stdinUtf8.data, stdinUtf8.count, stdinUtf16, charCount);
 	free(stdinUtf8.data);
 
 	// Read menu entries
@@ -551,10 +567,14 @@ void usage()
 		"\t-l    <count>   Amount of lines to show in list\n"
 		"\t-p    <text>    Prompt to show before input\n"
 		"\t-si   <index>   Initial selected line index\n"
+		"\t-px   <pixels>  Sets padding on window\n"
+		"\t-wx   <pixels>  Sets width of the window and centers it on the screen\n"
 		"\t-bg   <hex>     Background color\n"
 		"\t-fg   <hex>     Foreground color\n"
 		"\t-sbg  <hex>     Selected background color\n"
 		"\t-sfg  <hex>     Selected foreground color\n"
+		"\t-tbg  <hex>     Text input background color\n"
+		"\t-tfg  <hex>     Text input foreground color\n"
 		"\t-f    <font>    Font name\n"
 		"\t-fs   <size>    Font size\n"
 		"\n");
@@ -570,12 +590,14 @@ int main(int argc, char **argv)
 	state_t state = {
 		.settings = {
 			.wndClass = L"wlines_window",
-			.margin = 4,
+			.padding = 4,
 			.caseSensitiveSearch = false,
 			.bg = parseColor("#000000"),
 			.fg = parseColor("#ffffff"),
 			.bgSelect = parseColor("#ffffff"),
 			.fgSelect = parseColor("#000000"),
+			.bgEdit = parseColor("#111111"),
+			.fgEdit = parseColor("#ffffff"),
 			.fontName = "Courier New",
 			.fontSize = 24,
 			.lineCount = 15,
@@ -606,6 +628,17 @@ int main(int argc, char **argv)
 			if (state.settings.selectedIndex < 0) {
 				usage();
 			}
+		} else if (!strcmp(argv[i], "-px")) {
+			state.settings.padding = atoi(argv[++i]);
+			if (state.settings.padding < 0) {
+				usage();
+			}
+		} else if (!strcmp(argv[i], "-wx")) {
+			state.settings.width = atoi(argv[++i]);
+			state.settings.centerWindow = true;
+			if (state.settings.width < 1) {
+				usage();
+			}
 		} else if (!strcmp(argv[i], "-bg")) {
 			state.settings.bg = parseColor(argv[++i]);
 		} else if (!strcmp(argv[i], "-fg")) {
@@ -614,6 +647,10 @@ int main(int argc, char **argv)
 			state.settings.bgSelect = parseColor(argv[++i]);
 		} else if (!strcmp(argv[i], "-sfg")) {
 			state.settings.fgSelect = parseColor(argv[++i]);
+		} else if (!strcmp(argv[i], "-tbg")) {
+			state.settings.bgEdit = parseColor(argv[++i]);
+		} else if (!strcmp(argv[i], "-tfg")) {
+			state.settings.fgEdit = parseColor(argv[++i]);
 		} else if (!strcmp(argv[i], "-f")) {
 			state.settings.fontName = argv[++i];
 		} else if (!strcmp(argv[i], "-fs")) {
