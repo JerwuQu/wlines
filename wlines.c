@@ -378,8 +378,12 @@ LRESULT CALLBACK mainWndProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	case WM_CLOSE:
 		exit(1);
 	case WM_LBUTTONDOWN:;
+		const int mx = GET_Y_LPARAM(lparam);
+		if (mx < entriesTop) {
+			return 0;
+		}
 		const size_t newIdx = max(0, min(state->searchResultCount - 1,
-				pageStartI + (GET_Y_LPARAM(lparam) - entriesTop) / state->settings.fontSize));
+				pageStartI + (mx - entriesTop) / state->settings.fontSize));
 		if (newIdx == state->selectedResultIndex) {
 			printUtf16AsUtf8(state->entries[state->searchResults[state->selectedResultIndex]]);
 
