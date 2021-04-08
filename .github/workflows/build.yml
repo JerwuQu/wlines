@@ -16,3 +16,23 @@ jobs:
       with:
         name: wlines
         path: wlines.exe
+    - name: Create Pre-release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ci-${{ github.sha }}
+        release_name: CI build
+        draft: false
+        prerelease: true
+    - name: Upload release asset
+      id: upload-release-asset 
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: wlines.exe
+        asset_name: wlines.exe
+        asset_content_type: application/octet-stream
