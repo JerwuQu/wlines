@@ -7,12 +7,10 @@ jobs:
     steps:
     - name: Checkout repo
       uses: actions/checkout@v1
-    - name: Set up MinGW
-      uses: egor-tensin/setup-mingw@v2
-      with:
-        platform: x64
+    - name: Install deps
+      run: sudo apt install gcc-mingw-w64-x86-64
     - name: Build
-      run: make
+      run: CC=x86_64-w64-mingw32-gcc make
     - name: Upload artifact
       uses: actions/upload-artifact@master
       with:

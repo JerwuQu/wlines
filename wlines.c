@@ -7,6 +7,9 @@
 #define _UNICODE
 #undef _MBCS
 
+// Use MinGW STDIO implementations
+#define __USE_MINGW_ANSI_STDIO
+
 #include <windows.h>
 #include <windowsx.h>
 #include <shlwapi.h>
@@ -36,6 +39,7 @@ typedef struct {
 	char *promptText;
 	int fontSize;
 	bool caseSensitiveSearch;
+	bool outputIndex;
 	COLORREF bg, fg, bgSelect, fgSelect, bgEdit, fgEdit;
 	int lineCount;
 	int selectedIndex;
@@ -208,9 +212,17 @@ LRESULT CALLBACK editWndProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		case VK_RETURN: // Enter - Output choice
 			// If no results or shift is held: print input, else: print result
 			if (state->selectedResultIndex == SELECTED_INDEX_NO_RESULT || (GetKeyState(VK_SHIFT) & 0x8000)) {
-				printUtf16AsUtf8(getTextboxString(state));
+				if (state->settings.outputIndex) {
+					printf("-1\n");
+				} else {
+					printUtf16AsUtf8(getTextboxString(state));
+				}
 			} else {
-				printUtf16AsUtf8(state->entries[state->searchResults[state->selectedResultIndex]]);
+				if (state->settings.outputIndex) {
+					printf("%zu\n", state->searchResults[state->selectedResultIndex]);
+				} else {
+					printUtf16AsUtf8(state->entries[state->searchResults[state->selectedResultIndex]]);
+				}
 			}
 
 			// Quit if control isn't held
@@ -385,7 +397,11 @@ LRESULT CALLBACK mainWndProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		const size_t newIdx = max(0, min(state->searchResultCount - 1,
 				pageStartI + (mx - entriesTop) / state->settings.fontSize));
 		if (newIdx == state->selectedResultIndex) {
-			printUtf16AsUtf8(state->entries[state->searchResults[state->selectedResultIndex]]);
+			if (state->settings.outputIndex) {
+				printf("%zu\n", state->searchResults[state->selectedResultIndex]);
+			} else {
+				printUtf16AsUtf8(state->entries[state->searchResults[state->selectedResultIndex]]);
+			}
 
 			// Quit if control isn't held
 			if (!(GetKeyState(VK_CONTROL) & 0x8000)) {
@@ -562,11 +578,15 @@ void usage()
 {
 	fprintf(stderr,
 		"wlines " WLINES_VERSION "\n"
+		"\n"
 		"USAGE:\n"
 		"\twlines.exe [FLAGS] [OPTIONS]\n"
+		"\n"
 		"FLAGS:\n"
 		"\t-h    Show help and exit\n"
 		"\t-cs   Case-sensitive filter\n"
+		"\t-id   Output index of the selected line, or -1 when no match\n"
+		"\n"
 		"OPTIONS:\n"
 		"\t-l    <count>   Amount of lines to show in list\n"
 		"\t-p    <text>    Prompt to show before input\n"
@@ -581,6 +601,19 @@ void usage()
 		"\t-tfg  <hex>     Text input foreground color\n"
 		"\t-f    <font>    Font name\n"
 		"\t-fs   <size>    Font size\n"
+		"\n"
+		"KEYBINDS:\n"
+		"\tEnter           Output selected line\n"
+		"\t[HELD] Ctrl     Don't quit after outputting\n"
+		"\t[HELD] Shift    Output entered text, ignoring the selected line\n"
+		"\tEscape          Exit without outputting anything\n"
+		"\n"
+		"\tArrow Up/Down   Select line\n"
+		"\tPage Up/Down    Jump pages\n"
+		"\tHome/End        Jump to first/last line\n"
+		"\n"
+		"\tMouse Click     Select or output line\n"
+		"\tMouse Scroll    Select line\n"
 		"\n");
 	exit(1);
 }
@@ -615,6 +648,8 @@ int main(int argc, char **argv)
 			usage();
 		} else if (!strcmp(argv[i], "-cs")) {
 			state.settings.caseSensitiveSearch = true;
+		} else if (!strcmp(argv[i], "-id")) {
+			state.settings.outputIndex = true;
 		} else if (i + 1 == argc) {
 			usage();
 		// Options
