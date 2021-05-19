@@ -276,6 +276,18 @@ LRESULT CALLBACK editWndProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	return CallWindowProc(state->editWndProc, wnd, msg, wparam, lparam);
 }
 
+void forceForeground(HWND hwnd)
+{
+	// Use trick from https://stackoverflow.com/a/59659421
+	const DWORD foregroundThreadId = GetWindowThreadProcessId(GetForegroundWindow(), 0);
+	const DWORD currentThreadId = GetCurrentThreadId();
+	AttachThreadInput(foregroundThreadId, currentThreadId, true);
+	BringWindowToTop(hwnd);
+	ShowWindow(hwnd, SW_SHOW);
+	SetForegroundWindow(hwnd);
+	AttachThreadInput(foregroundThreadId, currentThreadId, false);
+}
+
 LRESULT CALLBACK mainWndProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
 	state_t *state = (state_t*)GetWindowLongPtrA(wnd, GWLP_USERDATA);
@@ -295,7 +307,7 @@ LRESULT CALLBACK mainWndProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 			} else if (state->hadForeground) {
 				exit(1);
 			} else {
-				SetForegroundWindow(wnd);
+				forceForeground(state->mainWnd);
 			}
 		}
 		break;
@@ -498,11 +510,9 @@ void createWindow(state_t *state)
 	lStyle &= ~WS_OVERLAPPEDWINDOW;
 	SetWindowLong(state->mainWnd, GWL_STYLE, lStyle);
 
-	// Show window and attempt to focus it
-	ShowWindow(state->mainWnd, SW_SHOW);
+	// Show and attempt to focus window
 	ASSERT_WIN32_RESULT(UpdateWindow(state->mainWnd));
-	SetForegroundWindow(state->mainWnd);
-	SetActiveWindow(state->mainWnd);
+	forceForeground(state->mainWnd);
 	SetFocus(state->editWnd);
 
 	// Start foreground timer
