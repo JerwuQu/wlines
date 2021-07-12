@@ -531,8 +531,8 @@ void parseStdinEntries(state_t *state)
 
 	// Convert to utf16
 	const size_t charCount = MultiByteToWideChar(CP_UTF8, 0, stdinUtf8.data, stdinUtf8.count, 0, 0);
-	wchar_t *stdinUtf16 = xrealloc(0, charCount * 2);
-	memset(stdinUtf16, 0, charCount * 2);
+	wchar_t *stdinUtf16 = xrealloc(0, charCount * 2 + 1);
+	memset(stdinUtf16, 0, charCount * 2 + 1);
 	MultiByteToWideChar(CP_UTF8, 0, stdinUtf8.data, stdinUtf8.count, stdinUtf16, charCount);
 	free(stdinUtf8.data);
 
