@@ -32,12 +32,18 @@
 #define DRAWTEXT_PARAMS (DT_NOCLIP | DT_NOPREFIX | DT_END_ELLIPSIS)
 #define FONT_HMARGIN(sz) (int)(state->settings.fontSize / 6)
 
+typedef enum {
+	FM_COMPLETE,
+	FM_KEYWORDS,
+} filter_mode_t;
+
 typedef struct {
 	wchar_t *wndClass;
 	int padding;
 	char *fontName;
 	char *promptText;
 	int fontSize;
+	filter_mode_t filterMode;
 	bool caseSensitiveSearch;
 	bool outputIndex;
 	COLORREF bg, fg, bgSelect, fgSelect, bgEdit, fgEdit;
@@ -135,27 +141,59 @@ wchar_t *getTextboxString(state_t *state)
 	return buf.data;
 }
 
-void updateSearchResults(state_t *state)
+void filterReduceByStr(state_t *state, const wchar_t *str)
 {
-	const wchar_t *str = getTextboxString(state);
+	const size_t c = state->searchResultCount;
 	state->searchResultCount = 0;
-	if (wcslen(str) > 0) {
-		if (state->settings.caseSensitiveSearch) {
-			for (size_t i = 0; i < state->entryCount; i++) {
-				if (wcsstr(state->entries[i], str)) {
-					state->searchResults[state->searchResultCount++] = i;
-				}
-			}
-		} else {
-			for (size_t i = 0; i < state->entryCount; i++) {
-				if (StrStrIW(state->entries[i], str)) {
-					state->searchResults[state->searchResultCount++] = i;
-				}
+	if (state->settings.caseSensitiveSearch) {
+		for (size_t i = 0; i < c; i++) {
+			if (StrStrW(state->entries[state->searchResults[i]], str)) {
+				state->searchResults[state->searchResultCount++] = state->searchResults[i];
 			}
 		}
 	} else {
-		for (size_t i = 0; i < state->entryCount; i++) {
-			state->searchResults[state->searchResultCount++] = i;
+		for (size_t i = 0; i < c; i++) {
+			if (StrStrIW(state->entries[state->searchResults[i]], str)) {
+				state->searchResults[state->searchResultCount++] = state->searchResults[i];
+			}
+		}
+	}
+}
+
+void filterReduceByKeywords(state_t *state, wchar_t *str)
+{
+	// Iterate words and reduce results
+	wchar_t *space;
+	while ((space = StrStrW(str, L" "))) {
+		space[0] = 0;
+		if (wcslen(str) > 0) {
+			filterReduceByStr(state, str);
+		}
+		str = space + 1;
+	}
+	if (wcslen(str) > 0) {
+		filterReduceByStr(state, str);
+	}
+}
+
+void updateSearchResults(state_t *state)
+{
+	// Put all entries into results
+	state->searchResultCount = state->entryCount;
+	for (size_t i = 0; i < state->entryCount; i++) {
+		state->searchResults[i] = i;
+	}
+
+	// Filter by chosen method
+	wchar_t *str = getTextboxString(state);
+	if (wcslen(str) > 0) {
+		switch (state->settings.filterMode) {
+		case FM_COMPLETE:
+			filterReduceByStr(state, str);
+			break;
+		case FM_KEYWORDS:
+			filterReduceByKeywords(state, str);
+			break;
 		}
 	}
 
@@ -205,7 +243,7 @@ LRESULT CALLBACK editWndProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		default:
 			result = CallWindowProc(state->editWndProc, wnd, msg, wparam, lparam);
 		}
-		updateSearchResults(state);
+		updateSearchResults(state); // TODO: debounce on large entry set?
 		return result;
 	case WM_KEYDOWN: // When a key is pressed
 		switch (wparam) {
@@ -600,6 +638,7 @@ void usage()
 		"OPTIONS:\n"
 		"\t-l    <count>   Amount of lines to show in list\n"
 		"\t-p    <text>    Prompt to show before input\n"
+		"\t-fm   <mode>    Sets the desired filter mode (see list below)\n"
 		"\t-si   <index>   Initial selected line index\n"
 		"\t-px   <pixels>  Sets padding on window\n"
 		"\t-wx   <pixels>  Sets width of the window and centers it on the screen\n"
@@ -611,6 +650,10 @@ void usage()
 		"\t-tfg  <hex>     Text input foreground color\n"
 		"\t-f    <font>    Font name\n"
 		"\t-fs   <size>    Font size\n"
+		"\n"
+		"FILTER MODES:\n"
+		"\tcomplete        Filter on the entire search string (default)\n"
+		"\tkeywords        Filter on all individual space-delimited words in the search string\n"
 		"\n"
 		"KEYBINDS:\n"
 		"\tEnter           Output selected line\n"
@@ -638,6 +681,7 @@ int main(int argc, char **argv)
 		.settings = {
 			.wndClass = L"wlines_window",
 			.padding = 4,
+			.filterMode = FM_COMPLETE,
 			.caseSensitiveSearch = false,
 			.bg = parseColor("#000000"),
 			.fg = parseColor("#ffffff"),
@@ -672,6 +716,15 @@ int main(int argc, char **argv)
 			// TODO: encoding for windows arugments is strange
 			//       look into using `wmain` or `GetCommandLineW`
 			state.settings.promptText = argv[++i];
+		} else if (!strcmp(argv[i], "-fm")) {
+			const char *modeStr = argv[++i];
+			if (!strcmp(modeStr, "complete")) {
+				state.settings.filterMode = FM_COMPLETE;
+			} else if (!strcmp(modeStr, "keywords")) {
+				state.settings.filterMode = FM_KEYWORDS;
+			} else {
+				usage();
+			}
 		} else if (!strcmp(argv[i], "-si")) {
 			state.settings.selectedIndex = atoi(argv[++i]);
 			if (state.settings.selectedIndex < 0) {
