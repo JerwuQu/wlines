@@ -143,6 +143,10 @@ wchar_t *getTextboxString(state_t *state)
 
 void filterReduceByStr(state_t *state, const wchar_t *str)
 {
+	if (wcslen(str) == 0) {
+		return;
+	}
+
 	const size_t c = state->searchResultCount;
 	state->searchResultCount = 0;
 	if (state->settings.caseSensitiveSearch) {
@@ -166,14 +170,10 @@ void filterReduceByKeywords(state_t *state, wchar_t *str)
 	wchar_t *space;
 	while ((space = StrStrW(str, L" "))) {
 		space[0] = 0;
-		if (wcslen(str) > 0) {
-			filterReduceByStr(state, str);
-		}
+		filterReduceByStr(state, str);
 		str = space + 1;
 	}
-	if (wcslen(str) > 0) {
-		filterReduceByStr(state, str);
-	}
+	filterReduceByStr(state, str);
 }
 
 void updateSearchResults(state_t *state)
@@ -186,15 +186,13 @@ void updateSearchResults(state_t *state)
 
 	// Filter by chosen method
 	wchar_t *str = getTextboxString(state);
-	if (wcslen(str) > 0) {
-		switch (state->settings.filterMode) {
-		case FM_COMPLETE:
-			filterReduceByStr(state, str);
-			break;
-		case FM_KEYWORDS:
-			filterReduceByKeywords(state, str);
-			break;
-		}
+	switch (state->settings.filterMode) {
+	case FM_COMPLETE:
+		filterReduceByStr(state, str);
+		break;
+	case FM_KEYWORDS:
+		filterReduceByKeywords(state, str);
+		break;
 	}
 
 	state->selectedResultIndex = state->searchResultCount > 0 ? 0 : SELECTED_INDEX_NO_RESULT;
