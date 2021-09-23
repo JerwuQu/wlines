@@ -4,7 +4,7 @@ Dynamic menu for Windows - inspired by the [suckless](https://suckless.org/) [dm
 
 ### Download
 
-Each push to master builds a new [release](https://github.com/JerwuQu/wlines/releases) that you can download.
+Each push to master builds a new [release](https://github.com/JerwuQu/wlines/releases/latest) that you can download.
 
 ### Usage
 
