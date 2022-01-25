@@ -269,16 +269,14 @@ LRESULT CALLBACK editWndProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		case VK_ESCAPE: // Escape - Exit
 			exit(1);
 		case VK_UP: // Up - Previous result
-			if (state->selectedResultIndex > 0) {
-				state->selectedResultIndex--;
-				RedrawWindow(state->mainWnd, 0, 0, RDW_INVALIDATE);
-			}
+			state->selectedResultIndex =
+				(state->selectedResultIndex - 1 + state->searchResultCount) % state->searchResultCount;
+			RedrawWindow(state->mainWnd, 0, 0, RDW_INVALIDATE);
 			return 0;
 		case VK_DOWN: // Down - Next result
-			if (state->selectedResultIndex + 1 < state->searchResultCount) {
-				state->selectedResultIndex++;
-				RedrawWindow(state->mainWnd, 0, 0, RDW_INVALIDATE);
-			}
+			state->selectedResultIndex =
+				(state->selectedResultIndex + 1) % state->searchResultCount;
+			RedrawWindow(state->mainWnd, 0, 0, RDW_INVALIDATE);
 			return 0;
 		case VK_HOME: // Home - First result
 			if (state->selectedResultIndex > 0) {
@@ -462,9 +460,8 @@ LRESULT CALLBACK mainWndProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		return 0;
 	case WM_MOUSEWHEEL:;
 		const int ydelta = GET_WHEEL_DELTA_WPARAM(wparam) / WHEEL_DELTA;
-		state->selectedResultIndex = max(0,
-				min((ssize_t)(state->searchResultCount - 1),
-				(ssize_t)(state->selectedResultIndex - ydelta)));
+		state->selectedResultIndex =
+			(state->selectedResultIndex - ydelta + state->searchResultCount) % state->searchResultCount;
 		RedrawWindow(state->mainWnd, 0, 0, RDW_INVALIDATE);
 		return 0;
 	}
